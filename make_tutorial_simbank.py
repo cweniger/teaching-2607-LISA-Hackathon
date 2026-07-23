@@ -14,12 +14,13 @@ Usage:  python tutorials/make_tutorial_simbank.py
 Needs:  GPU optional (sims are the cost, ~3 min on A100), repo deps
         (src/model.py simulator + ldc/lisabeta), data/x_obs_mbmb_1d.npy.
 """
+import os
 import sys
 from pathlib import Path
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(os.environ.get('DSBI_REPO', '/home/weniger/dsbi-ldc-mbhb/falcon-LDC-MBHB'))
 sys.path.insert(0, str(REPO / 'src'))
 sys.path.insert(0, str(REPO))
 
@@ -127,4 +128,39 @@ def main():
 
 
 if __name__ == '__main__':
+    if '--focused' in sys.argv:
+        main_focused()
+        raise SystemExit
     main()
+
+
+def main_focused():
+    """--focused: rung-2 bank. Draw 32768 params from the E1 posterior samples
+    broadened 3x (Gaussian kernel per dim, clipped to the narrowed prior box),
+    project with the SAME PCA basis (regenerated deterministically, seed 42)."""
+    out_path = Path(__file__).resolve().parent / 'mbhb_simbank_focused.npz'
+    e1 = np.load('/gpfs/home2/weniger/dsbi-ldc-mbhb/falcon-LDC-MBHB/'
+                 'standalone_tests/fm_dynamic_32k_E1.npy')   # (10000, 9)
+    print('[1/3] PCA basis (identical to main bank: seed-42 clean sims) ...', flush=True)
+    xr_clean = M.XRaw(noise_scale=0.0)
+    Xc = simulate(xr_clean, draw_z11(N_BASIS)).astype(np.float64)
+    mu = Xc.mean(0)
+    _, S, Vh = np.linalg.svd(Xc - mu, full_matrices=False)
+    V = Vh[:K].astype(np.float64)
+    print('[2/3] focused draws + sims ...', flush=True)
+    idx = RNG.choice(len(e1), N_TRAIN)
+    z9 = e1[idx] + 3.0 * e1.std(0) * RNG.standard_normal((N_TRAIN, 9))
+    for j, (name, lo, hi, col) in enumerate(PARAMS):
+        z9[:, j] = np.clip(z9[:, j], lo, hi)
+    z11 = draw_z11(N_TRAIN)                    # gauge angles randomized
+    for j, (name, lo, hi, col) in enumerate(PARAMS):
+        z11[:, col] = z9[:, j]
+    Xn = simulate(M.XRaw(noise_scale=1.0), z11)
+    s_train = ((Xn.astype(np.float64) - mu) @ V.T).astype(np.float32)
+    print('[3/3] writing ...', flush=True)
+    np.savez_compressed(out_path,
+                        z_train=z9.astype(np.float32), s_train=s_train,
+                        readme=np.array('rung-2 bank: params from E1 posterior '
+                                        'broadened 3x, same PCA basis/s_obs as '
+                                        'mbhb_simbank.npz'))
+    print(f'wrote {out_path} ({out_path.stat().st_size / 1e6:.1f} MB)')

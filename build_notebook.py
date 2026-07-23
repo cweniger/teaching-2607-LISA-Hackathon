@@ -8,8 +8,9 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SRC = HERE / 'tutorial_src.py'
-OUT = HERE / 'tutorial_lisa_sbi.ipynb'
+import sys
+SRC = HERE / (sys.argv[1] if len(sys.argv) > 1 else 'tutorial_src.py')
+OUT = HERE / (SRC.stem.replace('_src', '') + '.ipynb' if len(sys.argv) > 1 else 'tutorial_lisa_sbi.ipynb')
 
 
 def parse(text):
