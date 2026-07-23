@@ -71,8 +71,13 @@ params = {
     'inc': np.arccos(COS_INC), 'phi': PHI0,
     'lambda': LAM, 'beta': np.arcsin(SIN_BETA), 'psi': PSI,
 }
-wvf_pars = dict(minf=1e-5, maxf=0.1, timetomerger_max=1.0,
-                tmax=T_OBS / 31558149.8,  # observation span in years
+YEAR = 31558149.8                         # sidereal year [s], lisabeta's unit
+wvf_pars = dict(minf=1e-5, maxf=0.1,
+                # start the waveform exactly at the window start: our FFT grid
+                # is periodic with T_OBS, so any earlier inspiral would wrap
+                # around and contaminate the segment
+                timetomerger_max=(T_OBS / 2) / YEAR,
+                tmax=T_OBS / YEAR,        # observation span in years
                 TDI='TDIAET', acc=1e-4, approximant='IMRPhenomD',
                 LISAconst=pyresponse.LISAconstProposal,
                 responseapprox='full', frozenLISA=False, TDIrescaled=False)
@@ -110,25 +115,37 @@ else:
 
 
 def whiten_td(h_fd, S):
-    """FD -> whitened TD. Normalized so pure noise has unit variance/sample."""
+    """FD -> whitened TD, normalized so pure instrument noise has unit
+    variance per sample (the factor sqrt(N/2) makes that exact for a
+    hermitian spectrum whose whitened bins are unit complex normals)."""
     w = np.zeros_like(h_fd)
     w[1:] = h_fd[1:] / np.sqrt(S * T_OBS / 4)
-    return np.fft.irfft(w, n=N) * N / np.sqrt(2 * len(freqs))
+    return np.fft.irfft(w, n=N) * np.sqrt(N / 2)
 
 
 rng = np.random.default_rng(0)
 
 
 def noise_td():
-    """Whitened noise is trivial by construction: unit white Gaussian."""
+    """Whitened noise is unit white Gaussian by construction."""
     return rng.standard_normal(N)
+
+
+# sanity check: draw FD instrument noise from the PSD (CTFT convention:
+# E|n(f)|^2 = T*S(f)/2), push it through the SAME whitening, expect std = 1
+g1, g2 = rng.standard_normal((2, len(freqs) - 1))
+n_fd = np.zeros(len(freqs), complex)
+n_fd[1:] = np.sqrt(T_OBS * S_A / 4) * (g1 + 1j * g2)
+print(f'whitened instrument noise std = {whiten_td(n_fd, S_A).std():.3f} '
+      f'(should be ~1.00)')
 
 
 sig_A = whiten_td(A_fd, S_A)
 data_A = sig_A + noise_td()
 snr = np.sqrt(sum(np.sum(whiten_td(h, S) ** 2)
                   for h, S in [(A_fd, S_A), (E_fd, S_E)]))
-print(f'network SNR (A+E) of the 1-day segment: {snr:.0f}')
+print(f'network SNR (A+E) of the 1-day segment: {snr:.0f}  '
+      f'(analysis pipeline gets ~262 with its own window/epoch conventions)')
 
 fig, ax = plt.subplots(figsize=(10, 2.8))
 ax.plot(tgrid / 3600, data_A, lw=.4, label='whitened data (A channel)')
@@ -149,7 +166,85 @@ fig.tight_layout()
 # scales as 1/D — at what distance does the signal disappear into the noise?
 
 # %% [markdown]
-# ## 3. A miniature training bank
+# ## 3. Play with the source
+#
+# So far the simulator is a black box that emits one wiggly line. Let's open
+# it: regenerate the waveform while changing the source parameters and watch
+# what each one does physically. First a static comparison — three chirp
+# masses, same everything else, zoomed into a few hours around merger:
+
+# %%
+def clean_waveform(log10_Mc=LOG10_MC, log10_DL=LOG10_DL, cos_inc=COS_INC,
+                   lam=LAM, a1=A1, a2=A2, eta=ETA):
+    """Whitened clean A-channel time series for modified source parameters."""
+    Mc_ = 10 ** log10_Mc
+    Mtot_ = Mc_ / eta ** 0.6
+    m1_ = 0.5 * Mtot_ * (1 + np.sqrt(1 - 4 * eta))
+    p = dict(params, m1=m1_, m2=Mtot_ - m1_, chi1=a1, chi2=a2,
+             dist=10 ** log10_DL, inc=np.arccos(cos_inc), **{'lambda': lam})
+    A_fd_, E_fd_ = tdi_fd(p)
+    x = whiten_td(A_fd_, S_A)
+    snr_ = np.sqrt(np.sum(x ** 2) + np.sum(whiten_td(E_fd_, S_E) ** 2))
+    return x, snr_
+
+
+fig, ax = plt.subplots(figsize=(10, 3.4))
+for lmc, c in [(6.05, 'C0'), (LOG10_MC, 'C1'), (6.35, 'C2')]:
+    x, snr_ = clean_waveform(log10_Mc=lmc)
+    ax.plot(tgrid / 3600, x, c, lw=.9,
+            label=f'$\\log_{{10}}M_c={lmc:.2f}$  (SNR {snr_:.0f})')
+ax.set(xlim=(9, 14), xlabel='t [hours]', ylabel='whitened amplitude',
+       title='heavier binaries chirp lower and merge faster')
+ax.legend(loc='upper left', fontsize=9)
+fig.tight_layout()
+
+# %% [markdown]
+# Heavier binary → lower orbital frequency at merger and fewer visible cycles
+# in the band; the SNR changes too (the whole spectrum slides across the LISA
+# sensitivity bucket).
+#
+# Now the same thing with **sliders** (works in Colab; drag and the waveform
+# regenerates — each drag is a genuine call into the C waveform+response
+# code, ~0.1 s):
+
+# %%
+def show_waveform(log10_Mc=LOG10_MC, log10_DL=LOG10_DL, cos_inc=COS_INC,
+                  lam=LAM, t_center_h=12.0, window_h=4.0):
+    x, snr_ = clean_waveform(log10_Mc, log10_DL, cos_inc, lam)
+    fig, ax = plt.subplots(figsize=(9.5, 3))
+    ax.plot(tgrid / 3600, x, 'C1', lw=1)
+    ax.set(xlim=(t_center_h - window_h / 2, t_center_h + window_h / 2),
+           xlabel='t [hours]', ylabel='whitened amplitude',
+           title=f'network SNR = {snr_:.0f}')
+    plt.show()
+
+
+try:
+    from ipywidgets import interact, FloatSlider
+    interact(show_waveform,
+             log10_Mc=FloatSlider(min=5.9, max=6.5, step=0.01, value=LOG10_MC),
+             log10_DL=FloatSlider(min=4.0, max=5.5, step=0.05, value=LOG10_DL),
+             cos_inc=FloatSlider(min=-1.0, max=1.0, step=0.05, value=COS_INC),
+             lam=FloatSlider(min=0.0, max=6.28, step=0.1, value=LAM),
+             t_center_h=FloatSlider(min=1.0, max=23.0, step=0.5, value=12.0),
+             window_h=FloatSlider(min=0.5, max=24.0, step=0.5, value=4.0))
+except ImportError:
+    show_waveform()                        # static fallback without ipywidgets
+
+# %% [markdown]
+# Things to try:
+# - `cos_inc` → ±1 (face-on/off) vs 0 (edge-on): amplitude changes ~2×, and
+#   this is exactly the distance–inclination degeneracy from the main
+#   tutorial's Part 4 — a closer edge-on binary mimics a farther face-on one.
+# - `lam` (ecliptic longitude): the amplitude modulation is the LISA antenna
+#   pattern — sky information enters through the response, not the waveform.
+# - `log10_DL`: pure 1/D amplitude scaling. Combined with the two above,
+#   you are *feeling* the parameter degeneracies the posterior has to unravel.
+# - Widen `window_h` to 24 h and lower `log10_Mc` to 5.9: the inspiral fills
+#   the day.
+
+# %% [markdown]
+# ## 4. A miniature training bank
 #
 # Now the real thing the tutorial needed: draw parameters from the narrowed
 # prior, simulate whitened noisy data, compress with PCA. This is

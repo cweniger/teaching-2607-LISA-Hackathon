@@ -127,13 +127,6 @@ def main():
     print(f'wrote {out_path} ({out_path.stat().st_size / 1e6:.1f} MB)')
 
 
-if __name__ == '__main__':
-    if '--focused' in sys.argv:
-        main_focused()
-        raise SystemExit
-    main()
-
-
 def main_focused():
     """--focused: rung-2 bank. Draw 32768 params from the E1 posterior samples
     broadened 3x (Gaussian kernel per dim, clipped to the narrowed prior box),
@@ -164,3 +157,10 @@ def main_focused():
                                         'broadened 3x, same PCA basis/s_obs as '
                                         'mbhb_simbank.npz'))
     print(f'wrote {out_path} ({out_path.stat().st_size / 1e6:.1f} MB)')
+
+
+if __name__ == '__main__':
+    if '--focused' in sys.argv:
+        main_focused()
+    else:
+        main()
