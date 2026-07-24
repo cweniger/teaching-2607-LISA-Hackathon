@@ -143,7 +143,8 @@ data_A = sig_A + noise_td()
 snr = np.sqrt(sum(np.sum(whiten_td(h, S) ** 2)
                   for h, S in [(A_fd, S_A), (E_fd, S_E)]))
 print(f'network SNR (A+E) of the 1-day segment: {snr:.0f}  '
-      f'(analysis pipeline gets ~262 with its own window/epoch conventions)')
+      f'(the LDC-matched analysis pipeline measures ~393 for this extract; '
+      f'the offset is a constant waveform-normalization difference)')
 
 fig, ax = plt.subplots(figsize=(10, 2.8))
 ax.plot(tgrid / 3600, data_A, lw=.4, label='whitened data (A channel)')
