@@ -30,10 +30,18 @@ cell) or accepts a manual upload.
 | file | role |
 |---|---|
 | `tutorial_lisa_sbi.ipynb` | the tutorial (open this) |
-| `tutorial_src.py` | notebook source (jupytext percent format) |
-| `build_notebook.py` | `tutorial_src.py` → `.ipynb` converter |
+| `lisa_sims.ipynb` | companion: pip-install lisabeta, simulate LISA data live |
+| `lisa_sequential.ipynb` | companion: the sequential zoom on the MBHB, live sims |
+| `*_src.py` | notebook sources (jupytext percent format) |
+| `build_notebook.py` | `*_src.py` → `.ipynb` converter |
 | `make_tutorial_simbank.py` | regenerates `mbhb_simbank.npz` |
 | `DESIGN_NOTES.md` | why the tutorial is built this way |
+
+The two companion notebooks need no pre-simulated data: they install the
+lisabeta waveform stack from PyPI wheels (~20 s on Colab) and simulate
+everything live — `lisa_sequential.ipynb` runs the actual dynamic-SBI loop
+(4 rungs, ~2000 live simulations per rung, ~3 min on CPU) on the
+9-parameter MBHB problem.
 
 `make_tutorial_simbank.py` requires the LISA waveform stack (lisabeta +
 lisa-data-challenge) and the analysis repository
