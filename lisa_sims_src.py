@@ -106,20 +106,18 @@ print(f'FD waveform computed on {len(freqs)} bins')
 # %%
 psd = pyLISAnoise.evaluate_AET_psd(freqs[1:], TDIT=False,
                                    LISAnoise=pyLISAnoise.LISAnoiseSciRDv1,
-                                   TDIrescaled=False)
-if isinstance(psd, dict):                 # {'chan1': S_A, 'chan2': S_E, ...}
-    keys = [k for k in ('chan1', 'chan2') if k in psd] or list(psd)[:2]
-    S_A, S_E = np.asarray(psd[keys[0]]), np.asarray(psd[keys[1]])
-else:
-    S_A, S_E = np.asarray(psd[0]), np.asarray(psd[1])
+                                   TDIrescaled=False)   # {'freq', 'TDIA', 'TDIE'}
+S_A, S_E = np.asarray(psd['TDIA']), np.asarray(psd['TDIE'])
 
 
 def whiten_td(h_fd, S):
     """FD -> whitened TD, normalized so pure instrument noise has unit
     variance per sample (the factor sqrt(N/2) makes that exact for a
-    hermitian spectrum whose whitened bins are unit complex normals)."""
+    hermitian spectrum whose whitened bins are unit complex normals).
+    lisabeta uses the e^{+2pi i f t} Fourier convention, opposite to
+    numpy's — conjugate before the inverse FFT, else time runs backwards."""
     w = np.zeros_like(h_fd)
-    w[1:] = h_fd[1:] / np.sqrt(S * T_OBS / 4)
+    w[1:] = np.conj(h_fd[1:]) / np.sqrt(S * T_OBS / 4)
     return np.fft.irfft(w, n=N) * np.sqrt(N / 2)
 
 
