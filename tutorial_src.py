@@ -3,18 +3,19 @@
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb)
 #
-# **LISA tutorial — approximately 90 minutes.**
+# **LISA tutorial — approximately 105 minutes.**
 #
 # | part | idea | new ingredient |
 # |---|---|---|
-# | 1 | fit a function with a neural network | MLPs, overfitting |
-# | 2 | fit a *distribution*: SBI on a banana posterior | flow matching (FM) |
-# | 3 | a toy gravitational wave | data compression + **sequential** inference |
-# | 4 | the real thing: a massive black-hole binary in LISA data | (pre-simulated) |
+# | 1 | fit a *function* with a neural network | MLPs, overfitting, early stopping |
+# | 2 | fit a *distribution* | flow matching (FM), conditioning |
+# | 3 | fit a *posterior*: feed FM pairs from a simulator | SBI, amortization |
+# | 4 | a toy gravitational wave | data compression + **sequential** inference |
+# | 5 | the real thing: a massive black-hole binary in LISA data | (pre-simulated) |
 #
 # Each part fixes the visible failure of the one before. All code is plain
 # PyTorch — the same ~10-line loss function you meet in Part 2 analyzes the
-# LISA signal in Part 4.
+# LISA signal in Part 5.
 #
 # > **Colab setup:** Runtime → Change runtime type → **T4 GPU**, then run all
 # > cells top to bottom. Everything also works on CPU, just slower.
@@ -373,44 +374,367 @@ fig.tight_layout()
 # early stopping the big ones would keep drifting upward. **Data is what
 # buys accuracy:** the best validation loss falls steadily toward the noise
 # floor $\sigma^2$ as $N$ grows, and no architecture choice substitutes for
-# it. Both lessons carry over verbatim to Part 3, where "more data" means
+# it. Both lessons carry over verbatim to Part 4, where "more data" means
 # "more simulations".
 
 # %% [markdown]
 # ---
-# # Part 2 — Fitting distributions: SBI and flow matching  *(~25 min)*
+# # Part 2 — Modeling distributions with flow matching  *(~25 min)*
 #
-# In GW astronomy we don't want one best-fit — we want the **posterior**
-# $p(\theta\,|\,x)$. Simulation-based inference (SBI) learns it from pairs
-# $(\theta_i, x_i)$: draw $\theta_i$ from the prior, simulate $x_i$, train a
-# network that turns $x$ into a distribution over $\theta$.
+# Part 1 fitted a *function*: one number $y$ for each input $x$. Now we fit a
+# **distribution**. We are handed samples from some unknown density $q(w)$ and
+# want a machine that produces *more* samples from it — a **generative model**.
 #
-# Toy problem with a *curved* (banana) posterior:
+# The trick that has taken over the field is to build the sampler out of a
+# **flow**: start from an easy distribution (a unit Gaussian) and move the
+# points continuously until they are distributed like $q$. The motion is
+# described by a **velocity field** $v_\phi(w, t)$ — an MLP exactly like
+# Part 1's, taking a position $w$ and a time $t \in [0,1]$ — and "training the
+# generative model" means fitting that velocity field.
+#
+# ## The mechanics, in three equations
+#
+# **1. Training.** Pick a random time $t$, a random noise point
+# $w_0 \sim \mathcal N(0, I)$ and a random data sample $w_1 \sim q$. Place
+# yourself on the straight line between the two at time $t$, and regress the
+# velocity onto the direction that points from $w_0$ to $w_1$:
+#
+# $$\mathcal L(\phi) = \mathbb E_{t,\, w_0,\, w_1}
+#   \Big[\;\big\| \, v_\phi\big(\underbrace{(1-t)\,w_0 + t\,w_1}_{\textstyle w_t},
+#   \; t\big) \; - \; (w_1 - w_0) \, \big\|^2 \;\Big],
+#   \qquad t \sim U(0,1).$$
+#
+# Note what is *absent*: no integration, no sampling from the model, no
+# density, no Jacobian. It is a plain regression loss — Part 1's `fit` with a
+# fancier target.
+#
+# **2. Sampling.** Draw a noise point and integrate the learned velocity field
+# from $t = 0$ to $t = 1$:
+#
+# $$w(0) = w_0 \sim \mathcal N(0, I), \qquad
+#   \frac{\mathrm d w}{\mathrm d t} = v_\phi\big(w(t),\, t\big), \qquad
+#   w(1) \sim q_\phi \;\approx\; q .$$
+#
+# We integrate with plain Euler steps, $w \mathrel{+}= v_\phi(w,t)\,\Delta t$.
+#
+# **3. Evaluation.** If you also need the *density* of a point (we will, in
+# Part 4), integrate the same ODE **backwards** from $w_1$ while accumulating
+# the divergence of the velocity field:
+#
+# $$\log q_\phi(w_1) = \log \mathcal N\big(w(0);\, 0, I\big)
+#   \; - \; \int_0^1 \nabla \!\cdot\! v_\phi\big(w(t),\, t\big)\, \mathrm d t .$$
+#
+# *Why* regressing onto straight lines between unrelated random pairs produces
+# a velocity field whose flow transports $\mathcal N(0,I)$ to $q$ is genuinely
+# non-obvious, and we will not derive it here — see Lipman et al.
+# (arXiv:2210.02747), Liu et al. (arXiv:2209.03003) and Albergo &
+# Vanden-Eijnden (arXiv:2209.15571). For our purposes it is a black box with
+# three knobs, and the three equations above are all of them.
+
+# %% [markdown]
+# ## Two target distributions
+#
+# Two densities to aim at, both shaped like things you genuinely meet in GW
+# parameter estimation: a **banana** (a curved degeneracy between two
+# parameters) and a **spiral** (multi-modal along a curve). Neither is
+# remotely Gaussian.
+
+# %%
+def target_banana(n):
+    """n samples of a curved 'banana' density -> (n, 2)."""
+    w1 = 6 * torch.rand(n, device=dev) - 3                  # spread along the arc
+    w2 = 0.3 * torch.rand(n, device=dev).mul(2).sub(1) \
+        + 0.3 * w1 ** 2 - 1.2                               # bend it
+    return torch.stack([w1, w2 + 0.15 * torch.randn(n, device=dev)], 1)
+
+
+def target_spiral(n):
+    """n samples along an Archimedean spiral -> (n, 2)."""
+    a = 3 * np.pi * torch.rand(n, 1, device=dev).sqrt()   # angle
+    r = 0.45 * a                                          # radius grows with angle
+    c = torch.cat([r * a.cos(), r * a.sin()], 1)
+    return c + 0.12 * torch.randn(n, 2, device=dev)       # thicken the arm
+
+
+w_banana = target_banana(20000)
+w_spiral = target_spiral(20000)
+
+fig, ax = plt.subplots(1, 2, figsize=(9.2, 4.2))
+for a, w, ttl in [(ax[0], w_banana, 'target: banana'),
+                  (ax[1], w_spiral, 'target: spiral')]:
+    a.plot(w[:4000, 0].cpu(), w[:4000, 1].cpu(), 'k.', ms=1, alpha=.3)
+    a.set(title=ttl, xlabel=r'$w_1$', ylabel=r'$w_2$', aspect='equal')
+fig.tight_layout()
+
+# %% [markdown]
+# ## The implementation
+#
+# Three short functions, and they are the ones that will still be running in
+# Part 5 on real LISA data. `cond` is the conditioning input; leave it `None`
+# for now (we use it in the second half of this part).
+
+# %%
+# Generic MLP helper for the rest of the notebook: same idea as Part 1's MLP
+# class, but with configurable input/output dimensions and depth.
+def mlp(d_in, d_out, hidden, layers):
+    mods, d = [], d_in
+    for _ in range(layers):
+        mods += [nn.Linear(d, hidden), nn.ReLU()]
+        d = hidden
+    return nn.Sequential(*mods, nn.Linear(d, d_out))
+
+
+def fm_loss(net, w1, cond=None):
+    """Equation 1. This exact function is reused in Parts 3, 4 and 5."""
+    w0 = torch.randn_like(w1)                       # noise point
+    t = torch.rand(len(w1), 1, device=w1.device)    # random time
+    wt = (1 - t) * w0 + t * w1                      # point on the straight line
+    v = net(wt, t, cond)                            # predicted velocity there
+    return ((v - (w1 - w0)) ** 2).mean()            # regress onto w1 - w0
+
+
+class VelocityNet(nn.Module):
+    """Velocity field v(w, t | cond): an MLP with a Fourier embedding of t."""
+
+    def __init__(self, d_w, d_cond=0, hidden=128, layers=3):
+        super().__init__()
+        self.freqs = torch.tensor([1., 2., 4., 8.])
+        self.net = mlp(d_w + 9 + d_cond, d_w, hidden, layers)   # 9 = 1 + 4 + 4
+
+    def forward(self, w, t, cond=None):
+        ft = 2 * np.pi * t * self.freqs.to(t.device)
+        temb = torch.cat([t, ft.sin(), ft.cos()], 1)   # t, sin(2 pi f t), cos(...)
+        parts = [w, temb] if cond is None else [w, temb, cond]
+        return self.net(torch.cat(parts, 1))
+
+
+@torch.no_grad()
+def fm_sample(net, cond, d_w, steps=64, n=None, return_path=False):
+    """Equation 2: Euler-integrate dw/dt = v from t=0 (noise) to t=1 (samples)."""
+    n = len(cond) if cond is not None else n
+    device = cond.device if cond is not None else next(net.parameters()).device
+    w = torch.randn(n, d_w, device=device)             # w(0) ~ N(0, I)
+    path = [w.clone()]
+    for i in range(steps):
+        t = torch.full((n, 1), (i + 0.5) / steps, device=device)
+        w = w + net(w, t, cond) / steps                # w += v * dt
+        path.append(w.clone())
+    return (w, torch.stack(path)) if return_path else w
+
+# %%
+def train_fm(net, w1, cond=None, steps=3000, batch=512, lr=1e-3, log=True):
+    """Minimize fm_loss by Adam -- the same loop as Part 1's fit()."""
+    opt = torch.optim.Adam(net.parameters(), lr=lr)
+    t0 = time.time()
+    for step in range(steps):
+        i = torch.randint(0, len(w1), (batch,), device=w1.device)
+        loss = fm_loss(net, w1[i], None if cond is None else cond[i])
+        opt.zero_grad(); loss.backward(); opt.step()
+        if log and (step + 1) % 1000 == 0:
+            print(f'  step {step + 1}/{steps}  loss {loss.item():.3f}  '
+                  f'[{time.time() - t0:.0f}s]')
+    return net
+
+# %% [markdown]
+# ## Train it on the spiral
+
+# %%
+snet = VelocityNet(2).to(dev)                       # d_cond = 0: unconditional
+train_fm(snet, w_spiral)
+
+samp, path = fm_sample(snet, None, 2, n=4000, return_path=True)
+tgrid_fm = np.linspace(0, 1, path.shape[0])
+
+fig, ax = plt.subplots(1, 3, figsize=(14, 4.3))
+# (a) target vs model samples
+ax[0].plot(w_spiral[:4000, 0].cpu(), w_spiral[:4000, 1].cpu(), 'k.', ms=1,
+           alpha=.15, label='target')
+ax[0].plot(samp[:, 0].cpu(), samp[:, 1].cpu(), 'C0.', ms=1, alpha=.3,
+           label='flow-matching samples')
+ax[0].set(title='the model learned the spiral', xlabel=r'$w_1$', ylabel=r'$w_2$')
+ax[0].legend(markerscale=8, fontsize=8); ax[0].set_aspect('equal')
+# (b) where each sample came from, and the route it took
+p = path[:, :60].cpu()
+ax[1].plot(p[:, :, 0], p[:, :, 1], ':', color='gray', lw=.7)
+ax[1].plot(p[0, :, 0], p[0, :, 1], 'C2o', ms=4, label=r'base sample $w(0)$')
+ax[1].plot(p[-1, :, 0], p[-1, :, 1], 'C0o', ms=4, label=r'final sample $w(1)$')
+ax[1].set(title='60 trajectories of the learned flow', xlabel=r'$w_1$')
+ax[1].legend(fontsize=8); ax[1].set_aspect('equal')
+# (c) one coordinate as a function of t
+ax[2].plot(tgrid_fm, path[:, :200, 0].cpu(), lw=.5, alpha=.5)
+ax[2].set(title=r'$w_1$ along the flow', xlabel='t', ylabel=r'$w_1$')
+fig.tight_layout()
+
+# %% [markdown]
+# **Reading the panels.**
+# - *Left:* the model reproduces the spiral, arms and gaps included — from a
+#   plain regression loss and 3000 Adam steps.
+# - *Middle:* every final sample traces back to one Gaussian base point. Note
+#   the routes are **curved**, even though training only ever used *straight*
+#   lines between random pairs $(w_0, w_1)$ — the network learns the *average*
+#   velocity over all pairs passing through a point, and the resulting flow
+#   bends. Do not expect a trajectory to connect the pair it was trained on.
+# - *Right:* the same thing as a function of $t$: a single Gaussian blob at
+#   $t = 0$ progressively separating into the layered structure of the spiral
+#   by $t = 1$. Almost all of the shape forms late, near $t = 1$ — remember
+#   this, it comes back in Part 4.
+#
+# **Exercise 2a — your own distribution.** Write a sampler for a target of
+# your choice and fit it. All the machinery is above; you only need to supply
+# the samples. Ideas: two moons, a checkerboard, a ring, a mixture of a few
+# Gaussians, your initials.
+
+# %%
+# TODO — your code here: return (n, 2) samples from a distribution you invent.
+def my_target(n):
+    raise NotImplementedError('write your own target sampler')
+
+
+# %%
+# @title Reference solution { display-mode: "form" }
+def my_target(n):                                   # noqa: F811
+    """Two moons."""
+    a = np.pi * torch.rand(n // 2, 1, device=dev)   # half circle
+    top = torch.cat([a.cos(), a.sin()], 1)
+    bot = torch.cat([1 - a.cos(), -a.sin() + 0.4], 1)
+    w = 1.6 * torch.cat([top, bot]) + 0.09 * torch.randn(2 * (n // 2), 2, device=dev)
+    return w[torch.randperm(len(w), device=dev)]    # shuffle: plots take w[:4000]
+
+
+w_mine = my_target(20000)
+mynet = VelocityNet(2).to(dev)
+train_fm(mynet, w_mine, log=False)
+samp_mine = fm_sample(mynet, None, 2, n=4000)
+
+fig, ax = plt.subplots(figsize=(4.6, 4.4))
+ax.plot(w_mine[:4000, 0].cpu(), w_mine[:4000, 1].cpu(), 'k.', ms=1, alpha=.15,
+        label='target')
+ax.plot(samp_mine[:, 0].cpu(), samp_mine[:, 1].cpu(), 'C0.', ms=1, alpha=.3,
+        label='flow-matching samples')
+ax.set(xlabel=r'$w_1$', ylabel=r'$w_2$', title='your own distribution')
+ax.legend(markerscale=8, fontsize=8); ax.set_aspect('equal')
+fig.tight_layout()
+
+# %% [markdown]
+# ## Conditional flow matching
+#
+# One more ingredient and we are done. Very often we do not want *one*
+# distribution but a *family* of them, indexed by some input $c$ — that is a
+# **conditional** density $q(w \,|\, c)$. The change is minimal: feed $c$ to
+# the velocity field alongside $w$ and $t$,
+#
+# $$\mathcal L(\phi) = \mathbb E_{t,\, w_0,\, (w_1, c)}
+#   \Big[\;\big\| \, v_\phi\big((1-t)\,w_0 + t\,w_1,\; t \,\big|\, c\big)
+#   \; - \; (w_1 - w_0) \, \big\|^2 \;\Big],$$
+#
+# where the pairs $(w_1, c)$ are drawn **jointly**: each training sample comes
+# with the $c$ it belongs to. Sampling is unchanged except that you say which
+# $c$ you want. In code, that is the `cond` argument we have been passing as
+# `None` — nothing else moves.
+#
+# Demonstration: rings of varying radius. The condition $c$ is the radius,
+# the target $q(w\,|\,c)$ is a ring of that radius.
+
+# %%
+def target_ring(radius):
+    """radius: (n, 1) -> (n, 2) points on a ring of that radius."""
+    a = 2 * np.pi * torch.rand_like(radius)
+    return (torch.cat([radius * a.cos(), radius * a.sin()], 1)
+            + 0.06 * torch.randn(len(radius), 2, device=radius.device))
+
+
+c_train = 0.5 + 2.0 * torch.rand(40000, 1, device=dev)   # radii in [0.5, 2.5]
+w_ring = target_ring(c_train)
+
+rnet = VelocityNet(2, d_cond=1).to(dev)                  # <-- the only change
+train_fm(rnet, w_ring, c_train, steps=4000)
+
+fig, ax = plt.subplots(1, 2, figsize=(9.6, 4.6))
+ax[0].plot(w_ring[:6000, 0].cpu(), w_ring[:6000, 1].cpu(), 'k.', ms=1, alpha=.2)
+ax[0].set(title=r'training data: all radii mixed together', xlabel=r'$w_1$',
+          ylabel=r'$w_2$')
+for r, col in zip([0.7, 1.3, 1.9, 2.4], ['C0', 'C1', 'C2', 'C3']):
+    c = torch.full((1500, 1), r, device=dev)
+    s = fm_sample(rnet, c, 2).cpu()
+    ax[1].plot(s[:, 0], s[:, 1], '.', color=col, ms=1.5, alpha=.5, label=f'c = {r}')
+ax[1].set(title='one network, four requested radii', xlabel=r'$w_1$')
+ax[1].legend(markerscale=6, fontsize=8)
+for a in ax:
+    a.set_aspect('equal'); a.set(xlim=(-3, 3), ylim=(-3, 3))
+fig.tight_layout()
+
+# %% [markdown]
+# The training set (left) is a filled disc — no individual ring is visible in
+# it. Yet asking the trained network for $c = 0.7$ or $c = 2.4$ returns a
+# clean ring of exactly that radius (right). The network did not memorize four
+# rings; it learned the *whole family* $q(w\,|\,c)$ at once, which is why a
+# radius it never saw during training works just as well. That property is
+# called **amortization**, and it is the entire reason this machinery is
+# interesting for inference.
+#
+# **Exercise 2b.**
+# 1. **Interpolation.** Ask for a radius outside the training range, e.g.
+#    $c = 3.5$. Does the network extrapolate sensibly? (It has no reason to.)
+# 2. **The ODE knob.** Redo `fm_sample` with `steps=1, 4, 16`. How many Euler
+#    steps do you need before the rings stop being distorted? What does
+#    `steps=1` correspond to geometrically?
+# 3. **Your own family.** Make the condition control something else — the
+#    opening angle of an arc, the separation of two blobs, the number of
+#    modes — and check that unseen conditions behave.
+# 4. *(bonus)* In `fm_loss`, replace `t = torch.rand(...)` by
+#    `t = torch.rand(...) ** 0.5`, which spends more training time near
+#    $t = 1$ where the sharp structure forms. Do few-step samples get cleaner?
+#    Remember this trick — it returns at the end of Part 4.
+
+# %% [markdown]
+# ---
+# # Part 3 — From generative models to inference: SBI  *(~15 min)*
+#
+# Here is the whole idea of simulation-based inference, in one sentence:
+# **take conditional flow matching and feed it pairs from a simulator.**
+#
+# In Part 2 the pairs $(w_1, c)$ were points and their radius. Now let
+# $w_1 = \theta$ (the parameters we want to infer) and $c = x$ (the data we
+# observe), and generate the pairs like this:
+#
+# $$\theta_i \sim p(\theta) \quad \text{(prior)}, \qquad
+#   x_i \sim p(x \,|\, \theta_i) \quad \text{(simulator)} .$$
+#
+# Those $(\theta_i, x_i)$ are samples from the joint $p(x\,|\,\theta)\,p(\theta)$,
+# which we know how to sample *forwards*. Train the conditional model on them
+# and it learns the *other* factorization of the same joint — the **posterior**
+# $q_\phi(\theta \,|\, x) \approx p(\theta \,|\, x)$. No likelihood evaluation,
+# no MCMC, no Bayes' theorem applied by hand: the theorem is enforced simply by
+# where the training pairs come from.
+#
+# And because the model is amortized in $c = x$ (the rings), one training run
+# gives you the posterior for *any* observation.
+#
+# **Toy problem.** A simulator with a curved degeneracy:
 # $$\theta \sim U([-2,2]^2), \qquad
 #   x = \big(\theta_1 + 1.0\,\varepsilon_1,\;\;
 #            \theta_2 + \theta_1^2 + 0.1\,\varepsilon_2\big).$$
 # The first data component barely constrains $\theta_1$; the second tightly
 # constrains the *combination* $\theta_2+\theta_1^2$ — so the posterior is a
 # long thin arc along the parabola $\theta_2 = x_{{\rm obs},2} - \theta_1^2$.
-# (Degenerate curved combinations of parameters: the everyday reality of GW
-# posteriors.)
-#
-# **First attempt:** the simplest "distribution head" — predict a Gaussian
-# (mean + covariance) from $x$.
+# It is a banana, and this time we did not put it there by hand: it *emerges*
+# from the simulator. (Degenerate curved combinations of parameters: the
+# everyday reality of GW posteriors.)
 
 # %%
 BANANA_NOISE = torch.tensor([1.0, 0.1])             # weak on x1, strong on x2
 
 
 def banana_sim(theta):
+    """The simulator: theta (n,2) -> data x (n,2)."""
     x = torch.stack([theta[:, 0],
                      theta[:, 1] + theta[:, 0] ** 2], 1)
     return x + BANANA_NOISE.to(theta.device) * torch.randn_like(x)
 
 
-theta_train = torch.rand(20000, 2, device=dev) * 4 - 2
-x_train = banana_sim(theta_train)
-x_obs = torch.tensor([[0.0, 0.7]], device=dev)      # our "observation"
+theta_train = torch.rand(20000, 2, device=dev) * 4 - 2    # theta_i ~ prior
+x_train = banana_sim(theta_train)                         # x_i ~ p(x | theta_i)
+x_obs = torch.tensor([[0.0, 0.7]], device=dev)            # our "observation"
 
 
 def true_banana_logpost(grid, x_obs):
@@ -425,146 +749,53 @@ grid = torch.stack([GX.ravel(), GY.ravel()], 1).to(dev)
 logp_true = true_banana_logpost(grid, x_obs).reshape(300, 300).cpu()
 
 
-def plot_truth(ax):
-    p = np.exp(logp_true - logp_true.max())
+def plot_truth(ax, logp=None):
+    p = np.exp((logp_true if logp is None else logp)
+               - (logp_true if logp is None else logp).max())
     ax.contour(GX, GY, p, levels=[0.011, 0.14, 0.61], colors='k',
                linewidths=1)                       # 3/2/1 sigma of a Gaussian
     ax.set(xlim=(-2, 2), ylim=(-2, 2), xlabel=r'$\theta_1$', ylabel=r'$\theta_2$')
 
-# %%
-# Generic MLP helper for the rest of the notebook: same idea as Part 1's MLP
-# class, but with configurable input/output dimensions and depth.
-def mlp(d_in, d_out, hidden, layers):
-    mods, d = [], d_in
-    for _ in range(layers):
-        mods += [nn.Linear(d, hidden), nn.ReLU()]
-        d = hidden
-    return nn.Sequential(*mods, nn.Linear(d, d_out))
-
-
-# Gaussian posterior head: x -> (mu, Cholesky of covariance), trained by
-# maximizing the Gaussian log-likelihood of the true theta.
-gnet = mlp(2, 5, 128, 3).to(dev)                    # 2 mean + 3 Cholesky numbers
-
-
-def gaussian_nll(out, theta):
-    mu, d1, d2, off = out[:, :2], out[:, 2], out[:, 3], out[:, 4]
-    L11, L22 = d1.exp(), d2.exp()                   # positive diagonal
-    r = theta - mu
-    z1 = r[:, 0] / L11
-    z2 = (r[:, 1] - off * z1) / L22
-    return (0.5 * (z1 ** 2 + z2 ** 2) + d1 + d2).mean()
-
-
-opt = torch.optim.Adam(gnet.parameters(), lr=1e-3)
-for step in range(2000):
-    i = torch.randint(0, len(theta_train), (512,), device=dev)
-    loss = gaussian_nll(gnet(x_train[i]), theta_train[i])
-    opt.zero_grad(); loss.backward(); opt.step()
-
-with torch.no_grad():
-    out = gnet(x_obs)[0].cpu()
-    mu, L = out[:2], torch.tensor([[out[2].exp(), 0], [out[4], out[3].exp()]])
-    samp_g = mu + torch.randn(4000, 2) @ L.T
-
-fig, ax = plt.subplots(figsize=(4.6, 4.2))
-plot_truth(ax)
-ax.plot(samp_g[:, 0], samp_g[:, 1], 'C3.', ms=1, alpha=.3)
-ax.set_title('Gaussian head: cannot bend')
-fig.tight_layout()
-
 # %% [markdown]
-# The ellipse straddles the banana — a Gaussian **cannot represent curved or
-# multi-modal posteriors**, and real GW posteriors are full of both.
-#
-# ## Flow matching: distributions as flows
-#
-# Idea: start from noise $w_0\sim\mathcal N(0,1)$ and *transport* it to
-# posterior samples $w_1\sim p(\theta|x)$ by integrating a learned velocity
-# field $v(w, t\,|\,x)$ from $t=0$ to $1$. Training needs no integration at
-# all: draw a training sample $w_1$, a noise point $w_0$, a random time $t$,
-# put yourself on the straight line between them, and regress the velocity
-# onto the direction $w_1 - w_0$:
-#
-# $$\mathcal L = \mathbb E\,\big\|\,v\big((1{-}t)w_0 + t\,w_1,\;t\,\big|\,x\big)
-#   - (w_1 - w_0)\big\|^2 .$$
-#
-# That is the whole method — here it is in ten lines.
+# Now train — and notice there is nothing new to write. `VelocityNet`,
+# `fm_loss`, `train_fm` and `fm_sample` are the functions from Part 2,
+# unchanged; the only difference is that `cond` is now data from a simulator.
 
 # %%
-def fm_loss(net, w1, cond):
-    """The flow-matching objective. This exact function is reused in Parts 3 & 4."""
-    w0 = torch.randn_like(w1)
-    t = torch.rand(len(w1), 1, device=w1.device)
-    wt = (1 - t) * w0 + t * w1
-    v = net(wt, t, cond)
-    return ((v - (w1 - w0)) ** 2).mean()
-
-
-class VelocityNet(nn.Module):
-    """MLP velocity field v(w, t | cond) with a small Fourier time embedding."""
-
-    def __init__(self, d_w, d_cond, hidden=128, layers=3):
-        super().__init__()
-        self.freqs = torch.tensor([1., 2., 4., 8.])
-        self.net = mlp(d_w + 9 + d_cond, d_w, hidden, layers)
-
-    def forward(self, w, t, cond):
-        ft = 2 * np.pi * t * self.freqs.to(t.device)
-        temb = torch.cat([t, ft.sin(), ft.cos()], 1)
-        return self.net(torch.cat([w, temb, cond], 1))
-
-
-@torch.no_grad()
-def fm_sample(net, cond, d_w, steps=64):
-    """Integrate dw/dt = v from t=0 (noise) to t=1 (posterior samples)."""
-    w = torch.randn(len(cond), d_w, device=cond.device)
-    for i in range(steps):
-        t = torch.full((len(cond), 1), (i + 0.5) / steps, device=cond.device)
-        w = w + net(w, t, cond) / steps
-    return w
-
-# %%
-def train_fm(net, w1, cond, steps=3000, batch=512, lr=1e-3, log=True):
-    opt = torch.optim.Adam(net.parameters(), lr=lr)
-    t0 = time.time()
-    for step in range(steps):
-        i = torch.randint(0, len(w1), (batch,), device=w1.device)
-        loss = fm_loss(net, w1[i], cond[i])
-        opt.zero_grad(); loss.backward(); opt.step()
-        if log and (step + 1) % 1000 == 0:
-            print(f'  step {step + 1}/{steps}  loss {loss.item():.3f}  '
-                  f'[{time.time() - t0:.0f}s]')
-    return net
-
-
-fnet = VelocityNet(2, 2).to(dev)
+fnet = VelocityNet(2, d_cond=2).to(dev)             # w = theta (2), cond = x (2)
 train_fm(fnet, theta_train, x_train)
+
 samp_fm = fm_sample(fnet, x_obs.expand(4000, 2), 2).cpu()
 
-fig, ax = plt.subplots(figsize=(4.6, 4.2))
+fig, ax = plt.subplots(figsize=(4.8, 4.4))
 plot_truth(ax)
 ax.plot(samp_fm[:, 0], samp_fm[:, 1], 'C0.', ms=1, alpha=.3)
-ax.set_title('flow matching: bends just fine')
+ax.set_title('posterior from a simulator, no likelihood')
 fig.tight_layout()
 
 # %% [markdown]
-# **Exercise 2.**
-# 1. **Amortization.** The network learned $p(\theta|x)$ for *every* $x$, not
-#    just ours. Sample the posterior for `x_obs = [[-1.0, 1.5]]` — *without
-#    retraining* — and overlay the analytic truth (rebuild `logp_true` for the
-#    new observation). One simulator + one training = posteriors for all
-#    observations.
-# 2. **The ODE knob.** Redo the sampling with `steps=1, 4, 16`. How many steps
-#    do you need before the banana stops being distorted?
-# 3. *(bonus)* In `fm_loss`, replace `t = torch.rand(...)` by
-#    `t = torch.rand(...) ** 0.5` (more training near $t{=}1$, where the flow
-#    must form the sharp shape). Does the banana get cleaner at few steps?
-#    Remember this trick — it returns at the end of Part 3.
+# Black contours: the exact posterior, which for this toy we can compute
+# analytically. Blue: samples from the trained network, given `x_obs`. We just
+# did Bayesian inference with a regression loss.
+#
+# **Exercise 3.**
+# 1. **Amortization, again.** The network learned $p(\theta|x)$ for *every*
+#    $x$, not just ours. Sample the posterior for `x_obs2 = [[-1.0, 1.5]]` —
+#    *without retraining* — and overlay the analytic truth (rebuild the grid
+#    posterior with `true_banana_logpost(grid, x_obs2)` and pass it to
+#    `plot_truth`). One simulator plus one training run buys you posteriors
+#    for all observations.
+# 2. **Sanity check.** Simulate a fresh $x$ from a *known* $\theta$, sample the
+#    posterior, and check the truth lands inside it. Repeat a few times: how
+#    often does the truth fall outside the 1-sigma contour? (This is the seed
+#    of coverage testing, the standard way to validate an SBI posterior.)
+# 3. **Break it.** Change `BANANA_NOISE` to `[1.0, 0.01]`, making the posterior
+#    ten times thinner, and retrain. Does the network still track it? (Keep the
+#    answer in mind — Part 4 is about exactly this failure.)
 
 # %% [markdown]
 # ---
-# # Part 3 — A toy gravitational wave: compression + sequential zoom  *(~30 min)*
+# # Part 4 — A toy gravitational wave: compression + sequential zoom  *(~30 min)*
 #
 # Now the data looks like *our* data: a long noisy time series containing a
 # chirp,
@@ -842,20 +1073,20 @@ fig.tight_layout()
 #    spectrum steepened dramatically. This is why adaptive summaries
 #    (refitting the basis as you zoom) matter for the real problem.
 #
-# **Exercise 3.**
+# **Exercise 4.**
 # 1. Run with `gamma=0.1` and `gamma=1.0`. Which converges faster? Which is
 #    riskier? (Think: what happens if an early, imperfect posterior estimate
 #    excludes the truth — can a later rung recover?)
 # 2. Run with `refit_pca=False` (freeze the rung-1 basis). How much slower is
 #    the zoom? Look at the right panel to see why.
-# 3. *(bonus, from Exercise 2.3)* Define `fm_loss_late` with
+# 3. *(bonus, from Exercise 2b.4)* Define `fm_loss_late` with
 #    `t = torch.rand(...) ** (1/8)` for half the batch and pass it as
 #    `loss_fn=`. At LISA scale this one-line change moved our posteriors from
 #    "16 nats too wide" to "1 nat from mathematically optimal".
 
 # %% [markdown]
 # ---
-# # Part 4 — The real thing: a massive black-hole binary in LISA data  *(~20 min)*
+# # Part 5 — The real thing: a massive black-hole binary in LISA data  *(~20 min)*
 #
 # Same code, real problem: **LDC1-1 (Radler)** — one day of simulated LISA
 # data containing a merging massive black-hole binary at SNR ~260. What
@@ -949,7 +1180,7 @@ fig.tight_layout()
 # edge-on binary nearby. Note your posterior is honestly *wider* than the gray
 # reference — that analysis used a full year of data, you used one day.
 #
-# **Exercise 4.**
+# **Exercise 5.**
 # 1. Plot other 2-D marginals (e.g. chirp mass vs symmetric mass ratio,
 #    columns 2 & 3 — masses to five digits from one day of data!). Add the
 #    truth marker. Which parameters are tight, which are degenerate?
@@ -959,15 +1190,15 @@ fig.tight_layout()
 #    like over many noise realizations?)
 # 3. *(discussion)* This was amortized inference at a narrowed prior. What
 #    would you need to add to run it from the *full* prior? (Everything from
-#    Part 3: sequential zoom + adaptive summaries. That is what the `falcon`
-#    package automates — and with the late-time trick from Exercise 3.3 it
+#    Part 4: sequential zoom + adaptive summaries. That is what the `falcon`
+#    package automates — and with the late-time trick from Exercise 4.3 it
 #    reaches posteriors ~1 nat from the information-theoretic optimum.)
 #
 # ---
 # ## Where to go from here
 #
 # - **Dynamic (sequential) SBI:** Alvey, Lyu, Weniger et al., arXiv:2510.13997
-#   — the tempered-buffer mechanism you used in Part 3, at production scale.
+#   — the tempered-buffer mechanism you used in Part 4, at production scale.
 # - **Flow matching:** Lipman et al. 2022 (arXiv:2210.02747); for GW posteriors
 #   Dax et al. (arXiv:2305.17161).
 # - **LISA Data Challenges:** https://lisa-ldc.lal.in2p3.fr — Radler is LDC1;
