@@ -383,14 +383,53 @@ fig.tight_layout()
 #
 # Part 1 fitted a *function*: one number $y$ for each input $x$. Now we fit a
 # **distribution**. We are handed samples from some unknown density $q(w)$ and
-# want a machine that produces *more* samples from it — a **generative model**.
+# want a machine that reproduces it.
 #
-# The trick that has taken over the field is to build the sampler out of a
-# **flow**: start from an easy distribution (a unit Gaussian) and move the
-# points continuously until they are distributed like $q$. The motion is
-# described by a **velocity field** $v_\phi(w, t)$ — an MLP exactly like
-# Part 1's, taking a position $w$ and a time $t \in [0,1]$ — and "training the
-# generative model" means fitting that velocity field.
+# ## Why this is the central problem — and why it is hard
+#
+# Essentially all of statistics is a statement about probability
+# distributions: a prior, a likelihood, a posterior, a predictive
+# distribution, an evidence integral. So being able to *represent an
+# arbitrary probability density* — and compute with it — is not one technique
+# among many, it is the core capability. Everything after this cell is an
+# application of it.
+#
+# But a probability density is a much more constrained object than the
+# function of Part 1. We need a $q(w)$ that is
+#
+# - **non-negative** everywhere, $q(w) \ge 0$;
+# - **normalized**, $\int q(w)\,\mathrm d w = 1$;
+# - typically **smooth**, since the physics behind it usually is.
+#
+# and, crucially, we need *two operations* on it:
+#
+# - **evaluate**: given $w$, return $q(w)$ (for likelihoods, weights, model
+#   comparison);
+# - **sample**: produce fresh draws $w \sim q$ (for error bars, corner plots,
+#   propagating uncertainty).
+#
+# Ideally both are **fast**, because we will call them millions of times.
+#
+# Normalization is what makes this awkward: it is a *global* constraint, so you
+# cannot just take an MLP, declare its output to be a density, and train it —
+# changing the network anywhere changes the integral everywhere. The classical
+# escapes each give up something. A Gaussian satisfies everything and is
+# trivially fast, but can represent almost nothing. An unnormalized
+# energy-based model $q \propto e^{-E_\phi(w)}$ is arbitrarily flexible, but
+# you no longer know the normalization and sampling needs MCMC — slow, and it
+# has to be re-run for every new problem. Normalizing flows give you both
+# operations exactly, but only by restricting the architecture to invertible
+# layers with tractable Jacobians.
+#
+# **Flow matching** is the current answer: unrestricted network, exact
+# sampling, computable density, and a training objective that is plain
+# regression. The idea is to build the sampler out of a **flow** — start from
+# an easy distribution (a unit Gaussian) and move the points continuously
+# until they are distributed like $q$. The motion is described by a **velocity
+# field** $v_\phi(w, t)$, an MLP exactly like Part 1's taking a position $w$
+# and a time $t \in [0,1]$, and "training the generative model" means fitting
+# that velocity field. The price: sampling costs an ODE solve rather than a
+# single forward pass.
 #
 # ## The mechanics, in three equations
 #
@@ -429,7 +468,10 @@ fig.tight_layout()
 # non-obvious, and we will not derive it here — see Lipman et al.
 # (arXiv:2210.02747), Liu et al. (arXiv:2209.03003) and Albergo &
 # Vanden-Eijnden (arXiv:2209.15571). For our purposes it is a black box with
-# three knobs, and the three equations above are all of them.
+# three knobs, and the three equations above are all of them. Note that the
+# three requirements of the box above are met *by construction*: samples come
+# out of an ODE so they are genuine draws, and the density is normalized
+# because the flow only ever transports an already-normalized Gaussian.
 
 # %% [markdown]
 # ## Two target distributions
