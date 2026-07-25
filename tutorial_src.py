@@ -85,15 +85,32 @@ fig.tight_layout()
 # %% [markdown]
 # ## The network
 #
-# The MLP below maps one input number to one output number through three
-# hidden layers. Each layer is an affine map $h \mapsto Wh + b$ (`nn.Linear`)
-# followed by an elementwise nonlinearity — by default
-# $\mathrm{ReLU}(z) = \max(z, 0)$, which builds piecewise-linear fits with
-# visible kinks; smooth activations like `torch.tanh`, `nn.functional.gelu`
-# or `torch.selu` build smoother fits (try them!). The entries of the weight
-# matrices $W$ and bias vectors $b$ are the trainable parameters. The
-# `forward` method spells out, step by step, what happens to a batch of
-# inputs.
+# An MLP is a chain of affine maps, each followed by an elementwise
+# nonlinearity $g$. Ours takes a scalar $x$ through three hidden layers of
+# width $H$ and reads out a scalar:
+#
+# $$\begin{aligned}
+#   h^{(1)} &= g\big(W^{(1)} x + b^{(1)}\big),
+#     & W^{(1)} &\in \mathbb R^{H \times 1}, & b^{(1)} &\in \mathbb R^{H} \\
+#   h^{(2)} &= g\big(W^{(2)} h^{(1)} + b^{(2)}\big),
+#     & W^{(2)} &\in \mathbb R^{H \times H}, & b^{(2)} &\in \mathbb R^{H} \\
+#   h^{(3)} &= g\big(W^{(3)} h^{(2)} + b^{(3)}\big),
+#     & W^{(3)} &\in \mathbb R^{H \times H}, & b^{(3)} &\in \mathbb R^{H} \\
+#   \hat y  &= W^{(4)} h^{(3)} + b^{(4)},
+#     & W^{(4)} &\in \mathbb R^{1 \times H}, & b^{(4)} &\in \mathbb R
+# \end{aligned}$$
+#
+# or, in one line, $\;\hat y = \mathrm{MLP}_\phi(x)$ with the **parameters**
+# $\phi = \{W^{(1)}, b^{(1)}, \dots, W^{(4)}, b^{(4)}\}$ — the $2H^2 + 4H + 1$
+# numbers that training will adjust. Note the read-out has **no**
+# nonlinearity: $\hat y$ must be free to take any real value.
+#
+# The nonlinearity $g$ is what makes this more than one big affine map (a
+# chain of affine maps is just an affine map). By default
+# $g(z) = \mathrm{ReLU}(z) = \max(z, 0)$, which builds piecewise-linear fits
+# with visible kinks; smooth choices like `torch.tanh`, `nn.functional.gelu`
+# or `torch.selu` build smoother fits (try them!). The code below is the
+# formula above, line for line.
 
 # %%
 class MLP(nn.Module):
@@ -120,10 +137,15 @@ class MLP(nn.Module):
 #
 # We measure how well the network reproduces the training data with the
 # **mean squared error** loss,
-# $$\mathcal L(W, b) = \frac{1}{N} \sum_{i=1}^{N}
-#   \big(\mathrm{MLP}_{W,b}(x_i) - y_i\big)^2 ,$$
+# $$\mathcal L(\phi) = \frac{1}{N} \sum_{i=1}^{N}
+#   \big(\mathrm{MLP}_\phi(x_i) - y_i\big)^2 ,$$
 # and minimize it over *all* weights and biases at once by **gradient
-# descent**:
+# descent** — an iterative update that repeatedly takes a small step in the
+# direction of steepest descent,
+# $$\phi_{k+1} = \phi_k - \eta\, \nabla_\phi \mathcal L(\phi_k),
+#   \qquad k = 0, 1, 2, \dots$$
+# starting from the random initialization $\phi_0$, with **learning rate**
+# $\eta$ setting the step size. Each iteration $k$ is one *epoch* below:
 #
 # ```text
 # ALGORITHM  fit(net, {(x_i, y_i)}, epochs, eta)
@@ -245,16 +267,6 @@ fig.tight_layout()
 # below is `fit` with the standard mechanism built in: it remembers the
 # best-validation weights (`snap`) and rewinds to them at the end. One thing
 # is missing: the actual **stopping condition**. Add it — one or two lines.
-#
-# Then use it:
-# 1. `EPOCHS` is no longer a knob you must tune — pass something huge and let
-#    patience decide. Scan the *architecture* instead: `WIDTH`
-#    $\in \{2, 16, 256, 1024\}$ (you can also add or remove hidden layers in
-#    the `MLP` class). How does the best validation loss depend on capacity —
-#    is the biggest network the worst one?
-# 2. Scan the *data*: `N_TRAIN` $\in \{10, 30, 100, 500\}$ (re-run the data
-#    cell). How quickly does the best validation loss approach the noise
-#    floor $\sigma^2$?
 
 # %%
 def fit_early(net, x, y, x_val, y_val, epochs, lr=1e-3, patience=300):
@@ -304,6 +316,65 @@ def fit_early(net, x, y, x_val, y_val, epochs, lr=1e-3, patience=300):  # noqa: 
 
 net_es = MLP(WIDTH)
 hist_es = fit_early(net_es, x, y, x_val, y_val, 100_000)  # epochs: huge, on purpose
+
+# %% [markdown]
+# **Exercise 1c — now use it.** With early stopping in place `EPOCHS` is no
+# longer a knob you have to tune: pass something huge and let `patience`
+# decide. So scan the knobs that actually matter, recording the best
+# validation loss for each setting.
+# 1. Scan the *network*: `WIDTH` $\in \{2, 16, 256, 1024\}$. How does the best
+#    validation loss depend on capacity — is the biggest network the worst
+#    one? (Compare with what the *final-epoch* network would have given.)
+# 2. Scan the *data*: `N_TRAIN` $\in \{10, 30, 100, 500\}$. How quickly does
+#    the best validation loss approach the noise floor $\sigma^2$?
+
+# %%
+# TODO — your code here.
+# Hint: loop over the values, build a fresh MLP each time (seed it first for a
+# fair comparison), call fit_early, and collect hist[:, 1].min(). For the
+# N_TRAIN scan you also need fresh data: make_data(n, sigma=SIGMA).
+
+
+# %%
+# @title Reference solution { display-mode: "form" }
+print('WIDTH scan (N_TRAIN = 30):')
+best_w = []
+for w in [2, 16, 256, 1024]:
+    torch.manual_seed(0)                        # same init draw for fairness
+    h = fit_early(MLP(w), x, y, x_val, y_val, 100_000)
+    best_w.append(h[:, 1].min())
+    print(f'  WIDTH {w:5d}:  best val {best_w[-1]:.4f}   '
+          f'(final epoch would give {h[-1, 1]:.4f})')
+
+print('\nN_TRAIN scan (WIDTH = 256):')
+best_n = []
+for n in [10, 30, 100, 500]:
+    xn, yn = make_data(n, sigma=SIGMA)
+    torch.manual_seed(0)
+    h = fit_early(MLP(256), xn, yn, x_val, y_val, 100_000)
+    best_n.append(h[:, 1].min())
+    print(f'  N_TRAIN {n:4d}:  best val {best_n[-1]:.4f}')
+
+fig, ax = plt.subplots(1, 2, figsize=(11, 3.4))
+ax[0].loglog([2, 16, 256, 1024], best_w, 'C0o-')
+ax[0].set(xlabel='WIDTH', ylabel='best validation MSE',
+          title='capacity (with early stopping)')
+ax[1].loglog([10, 30, 100, 500], best_n, 'C1o-')
+ax[1].set(xlabel='N_TRAIN', title='training-set size')
+for a in ax:
+    a.axhline(SIGMA ** 2, color='gray', ls=':', lw=1, label=r'noise floor $\sigma^2$')
+    a.legend(fontsize=8)
+fig.tight_layout()
+
+# %% [markdown]
+# Two lessons. **Capacity is not the enemy:** with early stopping the wide
+# networks are no worse than the medium one (`WIDTH=2` *underfits* — too few
+# kinks to make a sine — while 256 and 1024 land in the same place). Without
+# early stopping the big ones would keep drifting upward. **Data is what
+# buys accuracy:** the best validation loss falls steadily toward the noise
+# floor $\sigma^2$ as $N$ grows, and no architecture choice substitutes for
+# it. Both lessons carry over verbatim to Part 3, where "more data" means
+# "more simulations".
 
 # %% [markdown]
 # ---
