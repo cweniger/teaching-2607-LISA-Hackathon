@@ -236,18 +236,19 @@ fig.tight_layout()
 
 # %% [markdown]
 # **Reading the two panels.**
-# - *Left:* the final fit threads the noisy points and invents wiggles between
-#   them; the early-stopped fit (best validation epoch) is smoother and closer
-#   to the truth — that is the network you *should* have kept.
-# - *Right:* the training loss falls forever — more epochs always help *on the
-#   training points*. The validation loss instead bottoms out and turns up:
-#   from that point on the network is memorizing training noise, which makes
-#   predictions on *new* data worse. Note it can never beat the noise floor
-#   $\sigma^2$ — even a perfect fit of $f$ cannot predict the noise in the
-#   held-out points.
-# - *Order matters:* the noise-chasing wiggles are high-frequency, and they
-#   appear only late — MLPs fit smooth structure first (**spectral bias**).
-#   That is why early stopping works: it keeps the signal, drops the noise.
+# - *Left:* a hundred and thirty thousand parameters against thirty data
+#   points, and the network does what unopposed regimes do — bends the country
+#   to fit its theories. The final fit threads every noisy point and invents
+#   the hills between. The early-stopped fit is smoother, truer, the one we
+#   should have kept.
+# - *Right:* the training loss falls forever, because effort there is always
+#   rewarded — the statistic a government likes to publish. Validation
+#   improves, bottoms out, then quietly climbs: everything after is noise
+#   memorized and called knowledge. It never beats the floor $\sigma^2$ — no
+#   fit of $f$ predicts noise it has not seen.
+# - *Timing:* smooth structure arrives first, the frantic wiggles late
+#   (**spectral bias**). Early stopping works because the signal comes early
+#   and the noise late.
 #
 # **Exercise 1a — read the plot.**
 # 1. Which of the two fits in the left panel would you trust to predict $y$ at
