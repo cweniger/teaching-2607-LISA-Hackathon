@@ -58,6 +58,31 @@ def make_data(n, sigma=0.15, seed=0):
     return x, y
 
 # %% [markdown]
+# Draw the data and *look at it first* — always. The dashed curve and the
+# shaded band are the generative model from above; the network will only ever
+# see the blue dots. (The gray dots are a second, held-out draw that we will
+# use for validation later — the network never trains on them.)
+
+# %%
+N_TRAIN, SIGMA = 20, 0.15                       # <-- data knobs (Exercise 1b)
+
+x, y = make_data(N_TRAIN, sigma=SIGMA)                # training set
+x_val, y_val = make_data(200, sigma=SIGMA, seed=1)    # noisy held-out set
+xg = torch.linspace(-1, 1, 400)[:, None]        # dense grid ...
+y_true = torch.sin(2 * np.pi * xg)              # ... with the noise-free truth
+
+fig, ax = plt.subplots(figsize=(7.5, 3.8))
+ax.fill_between(xg[:, 0], y_true[:, 0] - SIGMA, y_true[:, 0] + SIGMA,
+                color='k', alpha=.10, lw=0, label=r'$f(x) \pm \sigma$')
+ax.plot(xg, y_true, 'k--', lw=1.2, label=r'$f(x) = \sin(2\pi x)$')
+ax.plot(x_val, y_val, '.', color='gray', ms=4, alpha=.5,
+        label='validation data (held out)')
+ax.plot(x, y, 'C0o', ms=7, label=f'training data ($N = {N_TRAIN}$)')
+ax.set(xlabel='x', ylabel='y', title='the data the network gets to see')
+ax.legend(fontsize=9)
+fig.tight_layout()
+
+# %% [markdown]
 # ## The network
 #
 # The MLP below maps one input number to one output number through three
@@ -169,13 +194,8 @@ def fit(net, x, y, x_val, y_val, x_clean, y_clean, epochs, lr=1e-3):
     return np.array(hist), snap_val, snap_clean
 
 # %%
-N_TRAIN, WIDTH, EPOCHS = 20, 256, 6000          # <-- the knobs for Exercise 1b
-SIGMA = 0.15
+WIDTH, EPOCHS = 256, 6000                       # <-- network knobs (Exercise 1b)
 
-x, y = make_data(N_TRAIN, sigma=SIGMA)
-x_val, y_val = make_data(200, sigma=SIGMA, seed=1)
-xg = torch.linspace(-1, 1, 400)[:, None]        # dense grid ...
-y_true = torch.sin(2 * np.pi * xg)              # ... with the noise-free truth
 net = MLP(WIDTH)
 hist, snap_val, snap_clean = fit(net, x, y, x_val, y_val, xg, y_true, EPOCHS)
 
