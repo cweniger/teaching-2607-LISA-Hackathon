@@ -3,8 +3,7 @@
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb)
 #
-# **LISA tutorial — 90 minutes.** No ML background assumed (the lecture before
-# this session covered the concepts; here we build everything ourselves).
+# **LISA tutorial — approximately 90 minutes.**
 #
 # | part | idea | new ingredient |
 # |---|---|---|
