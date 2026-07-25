@@ -1244,8 +1244,9 @@ print(f'training samples in the posterior neighbourhood: {inside.sum().item()} /
 
 # %% [markdown]
 # **Sample starvation:** the posterior occupies a tiny fraction of the prior
-# volume, so a few dozen of the 32768 training examples land where the answer
-# lives — and the network is effectively interpolating between them. That is
+# volume, so a couple of dozen of the 32768 training examples land where the
+# answer lives — and the network is effectively interpolating between them.
+# That is
 # why the result is both broad and jumpy from run to run. More capacity cannot
 # fix having no data. The fix is to *move the training
 # distribution*: simulate where the current posterior estimate points,
