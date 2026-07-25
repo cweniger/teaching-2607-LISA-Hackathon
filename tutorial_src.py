@@ -144,18 +144,11 @@ class MLP(nn.Module):
 # We use **Adam**, a gradient-descent variant that adapts the step size per
 # parameter — the loop structure is exactly the one above.
 #
-# While training runs we monitor, every epoch:
-#
-# - the **training loss** $\mathcal L$ itself;
-# - the **validation loss**: the same MSE evaluated on the held-out data set.
-#   The network never trains on those points, so this measures how well it
-#   *generalizes* rather than memorizes;
-# - a **noise estimate** $\hat\sigma = \sqrt{\mathcal L}$, the RMS residual
-#   on the training points. If the network had learned $f$ exactly, the
-#   residuals would be pure noise and $\hat\sigma = \sigma = 0.2$. Watch
-#   what happens instead: $\hat\sigma$ keeps dropping *below* $\sigma$ —
-#   the network increasingly explains the noise as if it were signal.
-#   That is overfitting, condensed into a single number.
+# While training runs we monitor two numbers every epoch: the **training
+# loss** $\mathcal L$ itself, and the **validation loss** — the same MSE
+# evaluated on the held-out data set. The network never trains on those
+# points, so the validation loss measures how well it *generalizes* rather
+# than memorizes.
 
 # %%
 def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
@@ -183,15 +176,13 @@ def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
         opt.step()
         with torch.no_grad():   # book-keeping only — no gradients needed
             val = ((net(x_val) - y_val) ** 2).mean()   # held-out data
-            sigma_hat = loss.sqrt()        # RMS train residual = noise estimate
-            hist.append((loss.item(), val.item(), sigma_hat.item()))
+            hist.append((loss.item(), val.item()))
             # keep a copy of the weights whenever the validation loss improves —
             # this snapshot is the network early stopping would return
             if val < best_val:
                 best_val, snap_val = val.item(), copy.deepcopy(net.state_dict())
         if (ep + 1) % 1000 == 0:
-            print(f'epoch {ep + 1:5d}:  train {loss:.4f}   val {val:.4f}   '
-                  f'sigma_hat {sigma_hat:.3f}  (true sigma {SIGMA})')
+            print(f'epoch {ep + 1:5d}:  train {loss:.4f}   val {val:.4f}')
     return np.array(hist), snap_val
 
 # %%
@@ -216,10 +207,8 @@ ax[0].set(xlabel='x', ylabel='y'); ax[0].legend(fontsize=8)
 ax[1].semilogy(hist[:, 0], label='train loss')
 ax[1].semilogy(hist[:, 1], label='validation loss')
 ax[1].axhline(SIGMA ** 2, color='gray', ls=':', lw=1, label=r'noise floor $\sigma^2$')
-ax[1].semilogy(hist[:, 2], 'C4', label=r'$\hat\sigma$ (RMS train residual)')
-ax[1].axhline(SIGMA, color='r', ls='--', lw=1, label=fr'true $\sigma = {SIGMA}$')
-ax[1].set(xlabel='epoch', ylabel=r'MSE  /  $\hat\sigma$')
-ax[1].legend(fontsize=8, ncol=2)
+ax[1].set(xlabel='epoch', ylabel='MSE')
+ax[1].legend(fontsize=8)
 fig.tight_layout()
 
 # %% [markdown]
@@ -232,10 +221,7 @@ fig.tight_layout()
 #   from that point on the network is memorizing training noise, which makes
 #   predictions on *new* data worse. Note it can never beat the noise floor
 #   $\sigma^2$ — even a perfect fit of $f$ cannot predict the noise in the
-#   held-out points. The noise estimate $\hat\sigma$ first drops toward the
-#   true $\sigma$ (the network learns $f$; the residuals become pure noise),
-#   then keeps sinking below it — the network is absorbing noise into the fit.
-#   The moment $\hat\sigma$ crosses $\sigma$ is the moment memorization begins.
+#   held-out points.
 # - *Order matters:* the noise-chasing wiggles are high-frequency, and they
 #   appear only late — MLPs fit smooth structure first (**spectral bias**).
 #   That is why early stopping works: it keeps the signal, drops the noise.
@@ -244,9 +230,8 @@ fig.tight_layout()
 # 1. Which of the two fits in the left panel would you trust to predict $y$ at
 #    a new $x$ — and how could you make that choice in a *real* experiment,
 #    where the truth (black dashed) is not available?
-# 2. Connect the panels: where on the loss curves do the two fits live? How
-#    does the moment $\hat\sigma$ crosses the true $\sigma$ relate to the
-#    minimum of the validation curve?
+# 2. Connect the panels: where on the loss curves do the two fits live? What
+#    is the training loss doing at the epoch where validation is best?
 # 3. Why can the validation loss never drop below $\sigma^2 = 0.04$, even if
 #    the network learned $f$ perfectly?
 # 4. *(bonus)* Rebuild the network with a smooth activation,
