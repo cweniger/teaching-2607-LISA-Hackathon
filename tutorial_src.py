@@ -169,7 +169,7 @@ def fit(net, x, y, x_val, y_val, x_clean, y_clean, epochs, lr=1e-3):
     return np.array(hist), snap_val, snap_clean
 
 # %%
-N_TRAIN, WIDTH, EPOCHS = 20, 256, 6000          # <-- the knobs for Exercise 1
+N_TRAIN, WIDTH, EPOCHS = 20, 256, 6000          # <-- the knobs for Exercise 1b
 SIGMA = 0.15
 
 x, y = make_data(N_TRAIN, sigma=SIGMA)
@@ -221,18 +221,32 @@ fig.tight_layout()
 #   the noise into the fit. The moment $\hat\sigma$ crosses $\sigma$ is the
 #   moment memorization begins.
 #
-# **Exercise 1.** Play with the three knobs above and answer:
-# 1. Make the network *overfit badly* (hint: few points, wide net, many
-#    epochs). How do you *see* it in each panel — the fit, the loss curves,
-#    and $\hat\sigma$?
-# 2. Now make it *underfit* (hint: `WIDTH=2` or `EPOCHS=100`). Where does
-#    $\hat\sigma$ get stuck, and why above $\sigma$?
-# 3. The noisy validation loss never drops below $\sigma^2 \approx 0.023$ —
-#    why not? (In a real experiment, where the clean curve is unavailable,
-#    this floor is all you get.)
-# 4. Where would you stop training if you could only watch the noisy curves?
-#    This — **early stopping on a validation set** — is how every later part
+# **Exercise 1a — read the plot.**
+# 1. Which of the three fits in the left panel would you trust to predict $y$
+#    at a new $x$ — and how could you make that choice in a *real* experiment,
+#    where the truth (black dashed) is not available?
+# 2. Connect the panels: where on the loss curves does each of the three fits
+#    live? How does the moment $\hat\sigma$ crosses the true $\sigma$ relate
+#    to the minima of the two validation curves?
+# 3. Why can the *noisy* validation loss never drop below
+#    $\sigma^2 \approx 0.023$, even if the network learned $f$ perfectly?
+
+# %% [markdown]
+# **Exercise 1b — build an early stopper.** `fit` already remembers the best
+# weights (`snap_val`) but never *uses* them: it stubbornly trains to the last
+# epoch.
+# 1. Add **early stopping** to the loop: stop once `val` has not improved for
+#    500 consecutive epochs (a "patience" counter), then load the best
+#    snapshot back into the network — `net.load_state_dict(snap_val)` —
+#    before returning. Two or three added lines. This is how every later part
 #    of this notebook decides when to stop.
+# 2. With early stopping in place, `EPOCHS` stops being a knob you must tune.
+#    Scan the *architecture* instead: `WIDTH` $\in \{2, 16, 256, 1024\}$ (you
+#    can also add or remove hidden layers in the `MLP` class). How does the
+#    best validation loss depend on capacity — is the biggest network the
+#    worst one?
+# 3. Scan the *data*: `N_TRAIN` $\in \{10, 20, 100, 500\}$. How quickly does
+#    the best validation loss approach the noise floor $\sigma^2$?
 
 # %% [markdown]
 # ## A second failure mode: spectral bias
