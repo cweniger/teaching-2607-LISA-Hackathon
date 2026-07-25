@@ -263,6 +263,27 @@ fig.tight_layout()
 #    `torch.selu`), and retrain. How does the *character* of the overfitting
 #    wiggles change?
 
+# %%
+# @title Answers to 1a { display-mode: "form" }
+print("""
+1. The early-stopped (green) one. You never need the truth to make that call:
+   pick the epoch where the HELD-OUT loss is lowest. That is the whole idea.
+
+2. The final fit sits at the right edge of the plot -- lowest train loss, worst
+   validation loss. The early-stopped fit sits at the minimum of the orange
+   curve. At that epoch the train loss is still falling, which is the point:
+   'training is still improving' is not a reason to keep going.
+
+3. The held-out y values are f(x) + eps. Even a network that knew f exactly
+   still cannot predict eps, so its MSE on those points is E[eps^2] = sigma^2.
+   That floor is a property of the data, not of the network.
+
+4. ReLU builds fits out of straight segments, so overfitting shows up as sharp
+   kinks and corners. With tanh/GELU/SELU the network can only bend smoothly,
+   so it overfits with gentle waves instead -- the noise still gets absorbed,
+   it just looks more respectable while doing it.
+""")
+
 # %% [markdown]
 # **Exercise 1b — finish the early stopper.** Nobody stares at loss curves to
 # pick the best epoch by hand — training should stop *itself*. The function
@@ -586,9 +607,8 @@ snet = VelocityNet(2).to(dev)                       # d_cond = 0: unconditional
 train_fm(snet, w_spiral)
 
 samp, path = fm_sample(snet, None, 2, n=4000, return_path=True)
-tgrid_fm = np.linspace(0, 1, path.shape[0])
 
-fig, ax = plt.subplots(1, 3, figsize=(14, 4.3))
+fig, ax = plt.subplots(1, 2, figsize=(9.6, 4.4))
 # (a) target vs model samples
 ax[0].plot(w_spiral[:4000, 0].cpu(), w_spiral[:4000, 1].cpu(), 'k.', ms=1,
            alpha=.15, label='target')
@@ -603,29 +623,23 @@ ax[1].plot(p[0, :, 0], p[0, :, 1], 'C2o', ms=4, label=r'base sample $w(0)$')
 ax[1].plot(p[-1, :, 0], p[-1, :, 1], 'C0o', ms=4, label=r'final sample $w(1)$')
 ax[1].set(title='60 trajectories of the learned flow', xlabel=r'$w_1$')
 ax[1].legend(fontsize=8); ax[1].set_aspect('equal')
-# (c) one coordinate as a function of t
-ax[2].plot(tgrid_fm, path[:, :200, 0].cpu(), lw=.5, alpha=.5)
-ax[2].set(title=r'$w_1$ along the flow', xlabel='t', ylabel=r'$w_1$')
 fig.tight_layout()
 
 # %% [markdown]
 # **Reading the panels.**
 # - *Left:* the model reproduces the spiral, arms and gaps included — from a
 #   plain regression loss and 3000 Adam steps.
-# - *Middle:* every final sample traces back to one Gaussian base point. Note
+# - *Right:* every final sample traces back to one Gaussian base point. Note
 #   the routes are **curved**, even though training only ever used *straight*
 #   lines between random pairs $(w_0, w_1)$ — the network learns the *average*
 #   velocity over all pairs passing through a point, and the resulting flow
 #   bends. Do not expect a trajectory to connect the pair it was trained on.
-# - *Right:* the same thing as a function of $t$: a single Gaussian blob at
-#   $t = 0$ progressively separating into the layered structure of the spiral
-#   by $t = 1$. Almost all of the shape forms late, near $t = 1$ — remember
-#   this, it comes back in Part 4.
 #
-# **Exercise 2a — your own distribution.** Write a sampler for a target of
-# your choice and fit it. All the machinery is above; you only need to supply
-# the samples. Ideas: two moons, a checkerboard, a ring, a mixture of a few
-# Gaussians, your initials.
+# **Exercise 2a — your own distribution.** Fill in `my_target` below. That is
+# the *only* thing you write: the cell after it already trains a flow on
+# whatever your sampler returns and plots the result against it. Ideas: two
+# moons, a checkerboard, a ring, a mixture of a few Gaussians, your initials.
+# (Return the samples in a random order — the plots show the first 4000.)
 
 # %%
 # TODO — your code here: return (n, 2) samples from a distribution you invent.
@@ -644,6 +658,8 @@ def my_target(n):                                   # noqa: F811
     return w[torch.randperm(len(w), device=dev)]    # shuffle: plots take w[:4000]
 
 
+# %%
+# Provided: fit a flow to whatever my_target returns, and plot both.
 w_mine = my_target(20000)
 mynet = VelocityNet(2).to(dev)
 train_fm(mynet, w_mine, log=False)
@@ -729,6 +745,68 @@ fig.tight_layout()
 #    $t = 1$ where the sharp structure forms. Do few-step samples get cleaner?
 #    Remember this trick — it returns at the end of Part 4.
 
+# %%
+# TODO — your code here (questions 1, 2 and 4; question 3 is open-ended).
+
+
+# %%
+# @title Reference solution { display-mode: "form" }
+# 1 + 2: extrapolation beyond the training range, and the ODE step count.
+fig, ax = plt.subplots(1, 5, figsize=(16, 3.5))
+for a, r in zip(ax[:2], [2.4, 3.5]):
+    s = fm_sample(rnet, torch.full((1500, 1), r, device=dev), 2).cpu()
+    a.plot(s[:, 0], s[:, 1], 'C0.', ms=1.5, alpha=.5)
+    a.set(title=f'c = {r}' + ('  (in prior)' if r < 2.5 else '  (EXTRAPOLATED)'))
+for a, st in zip(ax[2:], [1, 4, 16]):
+    s = fm_sample(rnet, torch.full((1500, 1), 1.9, device=dev), 2, steps=st).cpu()
+    a.plot(s[:, 0], s[:, 1], 'C1.', ms=1.5, alpha=.5)
+    a.set(title=f'c = 1.9, steps = {st}')
+for a in ax:
+    a.set_aspect('equal'); a.set(xlim=(-4, 4), ylim=(-4, 4), xlabel=r'$w_1$')
+fig.tight_layout()
+
+# 4: late-time weighting of t. Same net size, same budget, only t changes.
+def fm_loss_late(net, w1, cond=None):
+    w0 = torch.randn_like(w1)
+    t = torch.rand(len(w1), 1, device=w1.device) ** 0.5   # <-- pushes t toward 1
+    wt = (1 - t) * w0 + t * w1
+    return ((net(wt, t, cond) - (w1 - w0)) ** 2).mean()
+
+
+rnet_late = VelocityNet(2, d_cond=1).to(dev)
+opt = torch.optim.Adam(rnet_late.parameters(), lr=1e-3)
+for step in range(4000):
+    i = torch.randint(0, len(w_ring), (512,), device=dev)
+    loss = fm_loss_late(rnet_late, w_ring[i], c_train[i])
+    opt.zero_grad(); loss.backward(); opt.step()
+
+fig, ax = plt.subplots(1, 3, figsize=(10, 3.5))
+for a, st in zip(ax, [1, 4, 16]):
+    s = fm_sample(rnet_late, torch.full((1500, 1), 1.9, device=dev), 2, steps=st).cpu()
+    a.plot(s[:, 0], s[:, 1], 'C2.', ms=1.5, alpha=.5)
+    a.set(title=f'late-t training, steps = {st}', aspect='equal',
+          xlim=(-4, 4), ylim=(-4, 4), xlabel=r'$w_1$')
+fig.tight_layout()
+
+# %% [markdown]
+# **Answers.** (1) Try it before assuming: here the network extrapolates to
+# $c = 3.5$ rather well, returning a clean ring of about the right radius. It
+# gets away with it because the family depends on $c$ in the simplest possible
+# way — the shape is fixed and only its scale moves — so the smooth
+# interpolation the network learned inside $[0.5, 2.5]$ happens to keep working
+# outside. Do not generalize from this: nothing *forces* it, and for a family
+# whose shape changes qualitatively with $c$ (say the number of modes)
+# extrapolation fails outright. Beyond the prior you are trusting the network,
+# not the data. (2) `steps=1` is a single Euler step, so the sample is just
+# $w_0 + v_\phi(w_0, \tfrac12)$ — one smooth displacement of the Gaussian,
+# which cannot open a hole in the middle, so you get a fuzzy disc instead of a
+# ring. It sharpens fast and is essentially converged by ~16 steps. (4) With
+# $t$ pushed toward 1 the
+# few-step samples are visibly tighter, because the network spends its
+# capacity where the shape actually forms. This is a one-line change that buys
+# real accuracy — at LISA scale it moved our posteriors from "16 nats too wide"
+# to "1 nat from optimal".
+
 # %% [markdown]
 # ---
 # # Part 3 — From generative models to inference: SBI  *(~15 min)*
@@ -736,9 +814,9 @@ fig.tight_layout()
 # Here is the whole idea of simulation-based inference, in one sentence:
 # **take conditional flow matching and feed it pairs from a simulator.**
 #
-# In Part 2 the pairs $(w_1, c)$ were points and their radius. Now let
+# In Part 2 the pairs $(w_1, c)$ were ring points and their radius. Now let
 # $w_1 = \theta$ (the parameters we want to infer) and $c = x$ (the data we
-# observe), and generate the pairs like this:
+# observe), and manufacture the pairs like this:
 #
 # $$\theta_i \sim p(\theta) \quad \text{(prior)}, \qquad
 #   x_i \sim p(x \,|\, \theta_i) \quad \text{(simulator)} .$$
@@ -747,94 +825,253 @@ fig.tight_layout()
 # which we know how to sample *forwards*. Train the conditional model on them
 # and it learns the *other* factorization of the same joint — the **posterior**
 # $q_\phi(\theta \,|\, x) \approx p(\theta \,|\, x)$. No likelihood evaluation,
-# no MCMC, no Bayes' theorem applied by hand: the theorem is enforced simply by
-# where the training pairs come from.
+# no MCMC, no Bayes' theorem applied by hand: the theorem is enforced purely by
+# where the training pairs come from. And because the model is amortized in
+# $c = x$ (the rings), one training run gives the posterior for *any*
+# observation.
 #
-# And because the model is amortized in $c = x$ (the rings), one training run
-# gives you the posterior for *any* observation.
+# ## The simulator: throwing a ball
 #
-# **Toy problem.** A simulator with a curved degeneracy:
-# $$\theta \sim U([-2,2]^2), \qquad
-#   x = \big(\theta_1 + 1.0\,\varepsilon_1,\;\;
-#            \theta_2 + \theta_1^2 + 0.1\,\varepsilon_2\big).$$
-# The first data component barely constrains $\theta_1$; the second tightly
-# constrains the *combination* $\theta_2+\theta_1^2$ — so the posterior is a
-# long thin arc along the parabola $\theta_2 = x_{{\rm obs},2} - \theta_1^2$.
-# It is a banana, and this time we did not put it there by hand: it *emerges*
-# from the simulator. (Degenerate curved combinations of parameters: the
-# everyday reality of GW posteriors.)
+# A ball is launched from the ground at angle $\alpha$ with speed $v$ on a flat
+# planet, and we measure only **where it lands**:
+#
+# $$r(v, \alpha) = \frac{v^2}{g}\,\sin(2\alpha), \qquad
+#   x = r(v, \alpha) + \sigma\,\varepsilon, \quad \varepsilon\sim\mathcal N(0,1).$$
+#
+# We want $\theta = (v, \alpha)$ from $x$. One number in, two parameters out —
+# so this problem is *degenerate by construction*, and the shape of the
+# degeneracy is not something we invented: it is whatever the curve
+# $v^2\sin(2\alpha) = \text{const}$ happens to look like. Two features fall out
+# of the physics for free:
+#
+# - **a curved ridge**, because a slower ball thrown at a better angle lands in
+#   the same place as a faster ball thrown at a worse one;
+# - **bimodality**, because $\sin(2\alpha)$ is symmetric about $45°$ — a lob at
+#   $60°$ and a line drive at $30°$ are indistinguishable from the landing
+#   point alone.
+#
+# This is the everyday reality of GW parameter estimation in miniature. (The
+# distance–inclination degeneracy you will meet in Part 5 is exactly this: a
+# face-on binary far away looks like an edge-on binary nearby.)
 
 # %%
-BANANA_NOISE = torch.tensor([1.0, 0.1])             # weak on x1, strong on x2
+G = 9.81
+SIGMA_X = 0.4                                # measurement noise on the range [m]
+BALL_LO = torch.tensor([8.0, 0.15], device=dev)      # v [m/s], alpha [rad]
+BALL_HI = torch.tensor([12.0, np.pi / 2 - 0.15], device=dev)
 
 
-def banana_sim(theta):
-    """The simulator: theta (n,2) -> data x (n,2)."""
-    x = torch.stack([theta[:, 0],
-                     theta[:, 1] + theta[:, 0] ** 2], 1)
-    return x + BANANA_NOISE.to(theta.device) * torch.randn_like(x)
+def ball_range(theta):
+    """Noise-free landing position r(v, alpha) -> (n,)."""
+    v, alpha = theta[:, 0], theta[:, 1]
+    return v ** 2 / G * torch.sin(2 * alpha)
 
 
-theta_train = torch.rand(20000, 2, device=dev) * 4 - 2    # theta_i ~ prior
-x_train = banana_sim(theta_train)                         # x_i ~ p(x | theta_i)
-x_obs = torch.tensor([[0.0, 0.7]], device=dev)            # our "observation"
+def ball_sim(theta, n_throws=1):
+    """Simulator: theta (n,2) -> mean of n_throws measured landings, (n,1)."""
+    r = ball_range(theta)[:, None]
+    noise = SIGMA_X * torch.randn(len(theta), n_throws, device=theta.device)
+    return r + noise.mean(1, keepdim=True)   # noise on the mean: sigma/sqrt(n)
 
 
-def true_banana_logpost(grid, x_obs):
-    """Analytic posterior on a grid (flat prior + Gaussian likelihood)."""
-    mu = torch.stack([grid[:, 0], grid[:, 1] + grid[:, 0] ** 2], 1)
-    return (-0.5 * ((mu - x_obs) ** 2 / BANANA_NOISE.to(grid.device) ** 2).sum(1))
+def draw_ball_prior(n):
+    return BALL_LO + (BALL_HI - BALL_LO) * torch.rand(n, 2, device=dev)
 
 
-g = torch.linspace(-2, 2, 300)
-GX, GY = torch.meshgrid(g, g, indexing='ij')
-grid = torch.stack([GX.ravel(), GY.ravel()], 1).to(dev)
-logp_true = true_banana_logpost(grid, x_obs).reshape(300, 300).cpu()
-
-
-def plot_truth(ax, logp=None):
-    p = np.exp((logp_true if logp is None else logp)
-               - (logp_true if logp is None else logp).max())
-    ax.contour(GX, GY, p, levels=[0.011, 0.14, 0.61], colors='k',
-               linewidths=1)                       # 3/2/1 sigma of a Gaussian
-    ax.set(xlim=(-2, 2), ylim=(-2, 2), xlabel=r'$\theta_1$', ylabel=r'$\theta_2$')
+THETA_TRUE = torch.tensor([[10.4, 0.62]], device=dev)   # v = 10.4 m/s, alpha = 36 deg
+print(f'true parameters:  v = {THETA_TRUE[0, 0]:.1f} m/s, '
+      f'alpha = {np.degrees(THETA_TRUE[0, 1].item()):.0f} deg')
+print(f'noise-free range: r = {ball_range(THETA_TRUE).item():.2f} m')
 
 # %% [markdown]
-# Now train — and notice there is nothing new to write. `VelocityNet`,
-# `fm_loss`, `train_fm` and `fm_sample` are the functions from Part 2,
-# unchanged; the only difference is that `cond` is now data from a simulator.
+# The reference posterior is analytic here (uniform prior times a Gaussian
+# likelihood on one number), so we can check the network against the truth.
 
 # %%
-fnet = VelocityNet(2, d_cond=2).to(dev)             # w = theta (2), cond = x (2)
-train_fm(fnet, theta_train, x_train)
+def ball_true_logpost(vg, ag, x_obs, n_throws=1):
+    """Exact log-posterior on a (v, alpha) grid, up to a constant."""
+    V, A = torch.meshgrid(vg, ag, indexing='ij')
+    r = V ** 2 / G * torch.sin(2 * A)
+    return -0.5 * (x_obs - r) ** 2 / (SIGMA_X ** 2 / n_throws)
 
-samp_fm = fm_sample(fnet, x_obs.expand(4000, 2), 2).cpu()
 
-fig, ax = plt.subplots(figsize=(4.8, 4.4))
-plot_truth(ax)
-ax.plot(samp_fm[:, 0], samp_fm[:, 1], 'C0.', ms=1, alpha=.3)
-ax.set_title('posterior from a simulator, no likelihood')
+vg = torch.linspace(BALL_LO[0], BALL_HI[0], 300, device=dev)
+ag = torch.linspace(BALL_LO[1], BALL_HI[1], 300, device=dev)
+
+
+def plot_ball_truth(ax, x_obs, n_throws=1):
+    lp = ball_true_logpost(vg, ag, x_obs, n_throws).cpu()
+    p = np.exp(lp - lp.max())
+    ax.contour(vg.cpu(), np.degrees(ag.cpu()), p.T, levels=[0.011, 0.14, 0.61],
+               colors='k', linewidths=1)             # 3/2/1 sigma of a Gaussian
+    ax.set(xlabel='v [m/s]', ylabel=r'$\alpha$ [deg]',
+           xlim=(8, 12), ylim=(np.degrees(0.15), 90 - np.degrees(0.15)))
+
+# %% [markdown]
+# ## Train — with nothing new to write
+#
+# `VelocityNet`, `fm_loss`, `train_fm` and `fm_sample` are the Part 2
+# functions, untouched. The only difference is that `cond` is now the output of
+# a simulator. We z-score both sides first, which is standard practice: the
+# flow works best when everything it sees is $O(1)$.
+#
+# We do it twice: once with a **single** throw, and once with the mean of
+# **twenty** throws (which shrinks the noise on the measurement to
+# $\sigma/\sqrt{20}$).
+
+# %%
+def zscore(a, mean, std):
+    return (a - mean) / std
+
+
+def run_ball_sbi(n_throws, n_train=40000, steps=3000):
+    """Simulate a training set, fit q(theta | x), return posterior samples."""
+    theta = draw_ball_prior(n_train)                  # theta_i ~ prior
+    x = ball_sim(theta, n_throws)                     # x_i ~ p(x | theta_i)
+    tmu, tsd = theta.mean(0), theta.std(0)
+    xmu, xsd = x.mean(0), x.std(0)
+
+    net = VelocityNet(2, d_cond=1).to(dev)            # w = theta (2), cond = x (1)
+    train_fm(net, zscore(theta, tmu, tsd), zscore(x, xmu, xsd), steps=steps)
+
+    x_obs = ball_sim(THETA_TRUE, n_throws)            # our observation
+    so = zscore(x_obs, xmu, xsd).expand(6000, 1)
+    post = fm_sample(net, so, 2) * tsd + tmu
+    return post.cpu(), x_obs.item()
+
+
+print('one throw:')
+post_1, x_obs_1 = run_ball_sbi(n_throws=1)
+print('twenty throws:')
+post_20, x_obs_20 = run_ball_sbi(n_throws=20)
+
+# %%
+fig, ax = plt.subplots(1, 2, figsize=(11, 4.6), sharey=True)
+for a, post, xo, nt in [(ax[0], post_1, x_obs_1, 1), (ax[1], post_20, x_obs_20, 20)]:
+    plot_ball_truth(a, xo, nt)
+    a.plot(post[:, 0], np.degrees(post[:, 1]), 'C0.', ms=1.5, alpha=.25)
+    a.plot(THETA_TRUE[0, 0].cpu(), np.degrees(THETA_TRUE[0, 1].cpu()), 'r*', ms=15)
+    a.set_title(f'{nt} throw{"s" if nt > 1 else ""}:  x = {xo:.2f} m')
+ax[1].set_ylabel('')
 fig.tight_layout()
 
 # %% [markdown]
-# Black contours: the exact posterior, which for this toy we can compute
-# analytically. Blue: samples from the trained network, given `x_obs`. We just
-# did Bayesian inference with a regression loss.
+# **What the posterior looks like.** Not a blob. A curved ridge that traces
+# every $(v, \alpha)$ landing the ball where we saw it, folded back on itself
+# about $45°$: the two arms meet at the slowest speed that can reach this far,
+# $v = \sqrt{g\,x}$, thrown at exactly $45°$. Read it along a vertical line and
+# it is **bimodal** — any speed above that minimum has two viable angles, one
+# lob and one line drive. The network found all of this from a regression loss,
+# having never been shown the range formula. Black contours: the exact
+# posterior.
+#
+# **What more data does, and does not do.** Twenty throws instead of one
+# shrinks the measurement noise by $\sqrt{20}$ and the arms become correspondingly
+# thinner. But they do not merge, and the second mode does not go away: no
+# amount of measuring *where* the ball lands can tell a $30°$ throw from a
+# $60°$ one. That is a **structural** degeneracy, and the only cures are a
+# different measurement (time of flight, apex height) or extra prior
+# information. Statistical error shrinks with data; degeneracy does not.
 #
 # **Exercise 3.**
-# 1. **Amortization, again.** The network learned $p(\theta|x)$ for *every*
-#    $x$, not just ours. Sample the posterior for `x_obs2 = [[-1.0, 1.5]]` —
-#    *without retraining* — and overlay the analytic truth (rebuild the grid
-#    posterior with `true_banana_logpost(grid, x_obs2)` and pass it to
-#    `plot_truth`). One simulator plus one training run buys you posteriors
-#    for all observations.
-# 2. **Sanity check.** Simulate a fresh $x$ from a *known* $\theta$, sample the
-#    posterior, and check the truth lands inside it. Repeat a few times: how
-#    often does the truth fall outside the 1-sigma contour? (This is the seed
-#    of coverage testing, the standard way to validate an SBI posterior.)
-# 3. **Break it.** Change `BANANA_NOISE` to `[1.0, 0.01]`, making the posterior
-#    ten times thinner, and retrain. Does the network still track it? (Keep the
-#    answer in mind — Part 4 is about exactly this failure.)
+# 1. **Amortization.** The trained network covers *every* $x$, not just ours.
+#    Use `run_ball_sbi` to get a network, then sample the posterior for two or
+#    three different observed ranges without retraining — try a near-maximal
+#    range ($x \approx v^2/g \approx 11$ m). What happens to the two modes as
+#    the range approaches the largest achievable one?
+# 2. **Break the degeneracy.** Change `ball_sim` to return *two* numbers, the
+#    range **and** the time of flight $2 v \sin\alpha / g$, and set
+#    `d_cond = 2`. What happens to the second mode? Why?
+# 3. **Coverage.** Draw 200 parameter pairs from the prior, simulate one
+#    observation each, sample 200 posterior draws per observation, and record
+#    the fraction of posterior samples with $v$ below the true $v$. If the
+#    posterior is calibrated, those fractions should be *uniform* on $[0,1]$ —
+#    plot the histogram. This is the standard SBI validation test, and it needs
+#    no reference posterior at all.
+
+# %%
+# TODO — your code here.
+
+
+# %%
+# @title Reference solution { display-mode: "form" }
+# 1: amortization over the observed range, in one trained network.
+theta_b = draw_ball_prior(40000)
+x_b = ball_sim(theta_b, 1)
+tmu_b, tsd_b = theta_b.mean(0), theta_b.std(0)
+xmu_b, xsd_b = x_b.mean(0), x_b.std(0)
+net_b = VelocityNet(2, d_cond=1).to(dev)
+train_fm(net_b, zscore(theta_b, tmu_b, tsd_b), zscore(x_b, xmu_b, xsd_b),
+         steps=6000, log=False)      # longer: question 3 needs an accurate posterior
+
+fig, ax = plt.subplots(1, 3, figsize=(14, 4.4), sharey=True)
+for a, xo in zip(ax, [6.0, 9.5, 11.5]):
+    xt = torch.tensor([[xo]], device=dev)
+    post = (fm_sample(net_b, zscore(xt, xmu_b, xsd_b).expand(6000, 1), 2)
+            * tsd_b + tmu_b).cpu()
+    plot_ball_truth(a, xo)
+    a.plot(post[:, 0], np.degrees(post[:, 1]), 'C0.', ms=1.5, alpha=.25)
+    a.set_title(f'x = {xo} m')
+for a in ax[1:]:
+    a.set_ylabel('')
+fig.tight_layout()
+
+# 2: adding the time of flight kills the second mode.
+def ball_sim2(theta, n_throws=1):
+    """Range AND time of flight -> (n, 2)."""
+    v, alpha = theta[:, 0], theta[:, 1]
+    m = torch.stack([v ** 2 / G * torch.sin(2 * alpha),      # range
+                     2 * v * torch.sin(alpha) / G], 1)       # time of flight
+    sd = torch.tensor([SIGMA_X, 0.02], device=theta.device)  # per-channel noise
+    return m + sd * torch.randn(len(theta), 2, device=theta.device) / np.sqrt(n_throws)
+
+
+x_b2 = ball_sim2(theta_b, 1)
+x2mu, x2sd = x_b2.mean(0), x_b2.std(0)
+net_b2 = VelocityNet(2, d_cond=2).to(dev)
+train_fm(net_b2, zscore(theta_b, tmu_b, tsd_b), zscore(x_b2, x2mu, x2sd), log=False)
+
+x_obs2 = ball_sim2(THETA_TRUE, 1)
+post2 = (fm_sample(net_b2, zscore(x_obs2, x2mu, x2sd).expand(6000, 2), 2)
+         * tsd_b + tmu_b).cpu()
+
+# 3: coverage -- the rank of the truth among posterior samples should be uniform.
+N_SIM, N_POST = 1000, 100
+theta_c = draw_ball_prior(N_SIM)
+x_c = ball_sim(theta_c, 1)
+post_c = fm_sample(net_b, zscore(x_c, xmu_b, xsd_b).repeat_interleave(N_POST, 0), 2)
+post_c = (post_c * tsd_b + tmu_b).reshape(N_SIM, N_POST, 2)
+ranks = (post_c[:, :, 0] < theta_c[:, None, 0]).float().mean(1).cpu()
+
+fig, ax = plt.subplots(1, 2, figsize=(10.5, 4.2))
+plot_ball_truth(ax[0], x_obs2[0, 0].item())
+ax[0].plot(post2[:, 0], np.degrees(post2[:, 1]), 'C2.', ms=1.5, alpha=.25)
+ax[0].plot(THETA_TRUE[0, 0].cpu(), np.degrees(THETA_TRUE[0, 1].cpu()), 'r*', ms=15)
+ax[0].set_title('range + time of flight: one mode left')
+ax[1].hist(ranks, bins=10, range=(0, 1), color='C0', alpha=.8)
+ax[1].axhline(N_SIM / 10, color='r', ls='--', lw=1, label='uniform expectation')
+ax[1].set(xlabel=r'fraction of posterior samples below true $v$',
+          ylabel='count', title='coverage: flat is calibrated')
+ax[1].legend(fontsize=8)
+fig.tight_layout()
+
+# %% [markdown]
+# **Answers.** (1) As the observed range approaches the maximum achievable one,
+# $v^2/g$ at $\alpha = 45°$, the two arms squeeze together and merge: only
+# throws near $45°$ can reach that far, so the ambiguity disappears and the
+# posterior becomes a single blob pinned to the corner of the prior. (2) The
+# time of flight depends on $\sin\alpha$, not $\sin 2\alpha$, and is therefore
+# *not* symmetric about $45°$ — one extra number breaks the reflection and one
+# mode dies. Choosing what to measure is inference design, and it beats any
+# amount of network tuning. (3) For an exact posterior the histogram is flat by
+# construction, so its *shape* diagnoses the failure: a slope means a biased
+# posterior, a hump in the middle means one that is too wide, and excess in
+# both end bins — which is what you should see here, mildly — means one that is
+# slightly too *narrow*, i.e. over-confident, so the truth lands in the tails
+# more often than it should. That is a few-percent error, invisible in the
+# contour plot above, and it needs no reference posterior to detect. Which is
+# why this is *the* validation tool once the problems get real and no exact
+# answer exists to compare against.
 
 # %% [markdown]
 # ---
