@@ -1096,7 +1096,7 @@ N_T = 1024
 tgrid = torch.linspace(0, 1, N_T, device=dev)
 PRIOR_LO = torch.tensor([40., 0.], device=dev)      # f0 [cycles], fdot
 PRIOR_HI = torch.tensor([80., 40.], device=dev)
-AMP = 0.5
+AMP = 1.0
 THETA_TRUE = torch.tensor([55.3, 17.8], device=dev)
 
 
@@ -1131,7 +1131,7 @@ fig.tight_layout()
 # values tell us each component's signal-to-noise; we keep the top $K$.
 
 # %%
-def fit_pca(theta_bank, K=32):
+def fit_pca(theta_bank, K=64):
     clean = chirp_sim(theta_bank, noise=0.0)
     mu = clean.mean(0)
     U, S, Vh = torch.linalg.svd(clean - mu, full_matrices=False)
@@ -1143,11 +1143,14 @@ def draw_prior(n):
     return PRIOR_LO + (PRIOR_HI - PRIOR_LO) * torch.rand(n, 2, device=dev)
 
 
-mu0, V0, eigs0 = fit_pca(draw_prior(4096))
+N_BANK, K_PCA = 32768, 64          # amortized-run budget and summary count
+torch.manual_seed(1)
+theta_bank = draw_prior(N_BANK)                 # one bank: PCA basis and training
+mu0, V0, eigs0 = fit_pca(theta_bank, K=K_PCA)
 fig, ax = plt.subplots(figsize=(5.5, 3.2))
 ax.semilogy(eigs0.cpu()[:200])
 ax.axhline(1, color='r', ls='--', lw=1, label='noise level')
-ax.axvline(32, color='k', ls=':', lw=1, label='K = 32')
+ax.axvline(K_PCA, color='k', ls=':', lw=1, label=f'K = {K_PCA}')
 ax.set(xlabel='PCA component', ylabel='component SNR',
        title='wide prior: signal variance spread over MANY components')
 ax.legend()
@@ -1170,19 +1173,18 @@ def zscore(a, mean, std):
     return (a - mean) / std
 
 
-theta_bank = draw_prior(4096)
-x_bank = chirp_sim(theta_bank)
+x_bank = chirp_sim(theta_bank)                  # add noise: this is the training data
 
 s_bank = summarize(x_bank, mu0, V0)
 s_mu, s_sd = s_bank.mean(0), s_bank.std(0) + 1e-6
 th_mu, th_sd = theta_bank.mean(0), theta_bank.std(0)
 
-cnet = VelocityNet(2, 32).to(dev)
+cnet = VelocityNet(2, K_PCA).to(dev)
 train_fm(cnet, zscore(theta_bank, th_mu, th_sd),
-         zscore(s_bank, s_mu, s_sd), steps=2000)
+         zscore(s_bank, s_mu, s_sd), steps=5000)
 
 s_obs = zscore(summarize(x_obs_chirp, mu0, V0), s_mu, s_sd)
-post0 = fm_sample(cnet, s_obs.expand(4000, 32), 2) * th_sd + th_mu
+post0 = fm_sample(cnet, s_obs.expand(4000, K_PCA), 2) * th_sd + th_mu
 
 # %%
 def chirp_true_logpost(f0g, fdg, x_obs):
@@ -1204,38 +1206,50 @@ def chirp_true_logpost(f0g, fdg, x_obs):
     return torch.logsumexp(logL, 0).reshape(len(f0g), len(fdg))
 
 
-f0g = torch.linspace(54.6, 56.0, 160, device=dev)
-fdg = torch.linspace(16.0, 19.5, 160, device=dev)
+F0_LO, F0_HI = 54.95, 55.80        # a few sigma around the exact posterior
+FD_LO, FD_HI = 16.85, 18.45
+f0g = torch.linspace(F0_LO, F0_HI, 160, device=dev)
+fdg = torch.linspace(FD_LO, FD_HI, 160, device=dev)
 lp = chirp_true_logpost(f0g, fdg, x_obs_chirp).cpu()
 
 fig, ax = plt.subplots(figsize=(5.5, 4.4))
 ax.plot(post0.cpu()[:, 0], post0.cpu()[:, 1], 'C0.', ms=2, alpha=.3,
         label='amortized posterior')
 p = np.exp(lp - lp.max())
-ax.contour(f0g.cpu(), fdg.cpu(), p.T, levels=[0.011, 0.14, 0.61], colors='k',
-           linewidths=1)
+# the exact posterior is far too small to see at this scale -- box it instead
+ax.add_patch(plt.Rectangle((F0_LO, FD_LO), F0_HI - F0_LO, FD_HI - FD_LO,
+                           fill=False, ec='k', lw=1.5,
+                           label='exact posterior (inside this box)'))
 ax.plot(*THETA_TRUE.cpu(), 'r*', ms=14, label='truth')
 ax.set(xlabel=r'$f_0$', ylabel=r'$\dot f$', xlim=(48, 64), ylim=(8, 28))
-ax.legend(); ax.set_title('amortized: right place, far too blurry')
+ax.legend(fontsize=8)
+ax.set_title('amortized: roughly the right place, far too blurry')
 fig.tight_layout()
 
 # %% [markdown]
-# The network found the right region but is **much** wider than the true
-# posterior (black contours — note we can compute them exactly here, a luxury
-# the real problem doesn't offer). Why? Count the training samples that fall
-# inside those contours:
+# The network found the right region, and it does contain the truth — but it is
+# **enormously** wider than the true posterior, which fits entirely inside that
+# little black box (we can compute it exactly here, a luxury the real problem
+# doesn't offer). The blur is about a factor of ten in each direction.
+#
+# It is also *unreliable*: re-run this with a different seed and the amortized
+# posterior sometimes drifts a couple of its own widths off the truth, or misses
+# it altogether. Neither the blur nor the wandering is a network-capacity
+# problem. Count the training samples that land inside those contours:
 
 # %%
-inside = ((theta_bank[:, 0] > 54.6) & (theta_bank[:, 0] < 56.0)
-          & (theta_bank[:, 1] > 16.0) & (theta_bank[:, 1] < 19.5))
+inside = ((theta_bank[:, 0] > F0_LO) & (theta_bank[:, 0] < F0_HI)
+          & (theta_bank[:, 1] > FD_LO) & (theta_bank[:, 1] < FD_HI))
 print(f'training samples in the posterior neighbourhood: {inside.sum().item()} / {len(theta_bank)}')
 
 # %% [markdown]
 # **Sample starvation:** the posterior occupies a tiny fraction of the prior
-# volume, so almost no training examples land where the answer lives. More
-# capacity cannot fix having no data. The fix is to *move the training
+# volume, so a few dozen of the 32768 training examples land where the answer
+# lives — and the network is effectively interpolating between them. That is
+# why the result is both broad and jumpy from run to run. More capacity cannot
+# fix having no data. The fix is to *move the training
 # distribution*: simulate where the current posterior estimate points,
-# retrain, repeat — each round ("rung") zooms further in. The training buffer
+# retrain, repeat — each **round** zooms further in. The training buffer
 # converges to a **tempered posterior** $\propto L^\gamma \pi$ ($\gamma<1$
 # keeps it a bit wider than the posterior for safety; see the Dynamic SBI
 # paper, arXiv:2510.13997).
@@ -1263,20 +1277,20 @@ def fm_logprob(net, w1, cond, steps=64):
     return base + logdet
 
 # %%
-def sequential_chirp(n_rungs=8, gamma=0.5, n_keep=2048, refit_pca=True,
+def sequential_chirp(n_rounds=8, gamma=0.5, n_keep=2048, refit_pca=True,
                      loss_fn=fm_loss, verbose=True):
     torch.manual_seed(1)
     buf_theta = draw_prior(4096)
     buf_x = chirp_sim(buf_theta)
     posts, spectra = [], []
-    # warm-started nets: keep training the SAME networks across rungs (this is
-    # what production codes do; retraining from scratch each rung underfits)
-    qc, qm = VelocityNet(2, 32).to(dev), VelocityNet(2, 32).to(dev)
+    # warm-started nets: keep training the SAME networks across rounds (this is
+    # what production codes do; retraining from scratch each round underfits)
+    qc, qm = VelocityNet(2, K_PCA).to(dev), VelocityNet(2, K_PCA).to(dev)
     opt_c = torch.optim.Adam(qc.parameters(), lr=2e-3)
     opt_m = torch.optim.Adam(qm.parameters(), lr=2e-3)
-    for rung in range(1, n_rungs + 1):
+    for round_ in range(1, n_rounds + 1):
         # -- gauges: PCA refit on the CURRENT buffer scale + z-scores
-        if refit_pca or rung == 1:
+        if refit_pca or round_ == 1:
             mu, V, eigs = fit_pca(buf_theta)
         spectra.append(eigs.cpu())
         s = summarize(buf_x, mu, V)
@@ -1293,10 +1307,10 @@ def sequential_chirp(n_rungs=8, gamma=0.5, n_keep=2048, refit_pca=True,
                 opt.zero_grad(); loss.backward(); opt.step()
         # -- propose from a 50/50 mixture, weight toward L^gamma * prior
         n_prop = 4096
-        wp = torch.cat([fm_sample(qc, so.expand(n_prop // 2, 32), 2),
-                        fm_sample(qm, torch.zeros(n_prop // 2, 32, device=dev), 2)])
-        lqc = fm_logprob(qc, wp, so.expand(n_prop, 32))
-        lqm = fm_logprob(qm, wp, torch.zeros(n_prop, 32, device=dev))
+        wp = torch.cat([fm_sample(qc, so.expand(n_prop // 2, K_PCA), 2),
+                        fm_sample(qm, torch.zeros(n_prop // 2, K_PCA, device=dev), 2)])
+        lqc = fm_logprob(qc, wp, so.expand(n_prop, K_PCA))
+        lqm = fm_logprob(qm, wp, torch.zeros(n_prop, K_PCA, device=dev))
         th_p = wp * tsd + tmu
         in_prior = ((th_p > PRIOR_LO) & (th_p < PRIOR_HI)).all(1)
         logw = gamma * (lqc - lqm) - torch.logaddexp(lqc, lqm)   # + log(flat prior)
@@ -1309,10 +1323,10 @@ def sequential_chirp(n_rungs=8, gamma=0.5, n_keep=2048, refit_pca=True,
         buf_theta = torch.cat([new_theta, buf_theta])[:4096]
         buf_x = torch.cat([chirp_sim(new_theta), buf_x])[:4096]
         # -- posterior readout at gamma=1 for the plot
-        post = fm_sample(qc, so.expand(4000, 32), 2) * tsd + tmu
+        post = fm_sample(qc, so.expand(4000, K_PCA), 2) * tsd + tmu
         posts.append(post.cpu())
         if verbose:
-            print(f'rung {rung}: buffer f0 std {buf_theta[:, 0].std():.3f}, '
+            print(f'round {round_}: buffer f0 std {buf_theta[:, 0].std():.3f}, '
                   f'posterior f0 std {post[:, 0].std():.3f}')
     return posts, spectra
 
@@ -1325,18 +1339,18 @@ colors = plt.cm.viridis(np.linspace(0, .9, len(posts)))
 for r, (post, c) in enumerate(zip(posts, colors), 1):
     for a in ax[:2]:
         a.plot(post[:, 0], post[:, 1], '.', ms=1.5, alpha=.25, color=c,
-               label=f'rung {r}' if a is ax[0] else None)
+               label=f'round {r}' if a is ax[0] else None)
 for a in ax[:2]:
     a.contour(f0g.cpu(), fdg.cpu(), p.T, levels=[0.011, 0.61], colors='k',
               linewidths=1)
     a.plot(*THETA_TRUE.cpu(), 'r*', ms=14)
     a.set(xlabel=r'$f_0$', ylabel=r'$\dot f$')
 ax[0].set(xlim=(40, 80), ylim=(0, 40), title='the zoom trajectory')
-ax[1].set(xlim=(54.6, 56.0), ylim=(16.0, 19.5),
-          title='late rungs vs exact posterior (black)')
+ax[1].set(xlim=(F0_LO, F0_HI), ylim=(FD_LO, FD_HI),
+          title='late rounds vs exact posterior (black)')
 ax[0].legend(markerscale=8, fontsize=8)
 for r, (e, c) in enumerate(zip(spectra, colors), 1):
-    ax[2].semilogy(e[:200], color=c, label=f'rung {r}')
+    ax[2].semilogy(e[:200], color=c, label=f'round {r}')
 ax[2].axhline(1, color='r', ls='--', lw=1)
 ax[2].set(xlabel='PCA component', ylabel='component SNR',
           title='compression gets easier as the prior shrinks')
@@ -1345,21 +1359,44 @@ fig.tight_layout()
 
 # %% [markdown]
 # Two things happened at once:
-# 1. **The posterior tightened** toward the true (black) contours, rung by
-#    rung — same network size, same per-rung simulation budget; only the
+# 1. **The posterior tightened** toward the true (black) contours, round by
+#    round — same network size, same per-round simulation budget; only the
 #    *training distribution* moved.
 # 2. **Compression became easy**: at the zoomed prior a handful of PCA
 #    components carry all the signal (right panel) — the flat wide-prior
 #    spectrum steepened dramatically. This is why adaptive summaries
 #    (refitting the basis as you zoom) matter for the real problem.
 #
+# **One honest caveat.** Compare the late rounds against the black contours
+# carefully: the final posterior is a little *narrower* than the exact one
+# (roughly half the width, in our runs). Some of that is the flow's own mild
+# over-confidence, which you already met in Part 3's coverage test, but most of
+# it is structural. The buffer converges to $L^\gamma\pi$, and we then train
+# $q_c(\theta|s)$ **on that buffer** — so the likelihood enters twice, once
+# through the buffer and once through the conditioning, and the readout behaves
+# like $L^{1+\gamma}\pi$ rather than $L\pi$. Correcting it means importance
+# reweighting the readout by $L^{-\gamma}$, which the ratio
+# $\log q_c - \log q_m$ already gives us. Production codes do exactly this;
+# we leave it out to keep the loop readable.
+#
 # **Exercise 4.**
 # 1. Run with `gamma=0.1` and `gamma=1.0`. Which converges faster? Which is
 #    riskier? (Think: what happens if an early, imperfect posterior estimate
-#    excludes the truth — can a later rung recover?)
-# 2. Run with `refit_pca=False` (freeze the rung-1 basis). How much slower is
+#    excludes the truth — can a later round recover?)
+# 2. Run with `refit_pca=False` (freeze the round-1 basis). How much slower is
 #    the zoom? Look at the right panel to see why.
-# 3. *(bonus, from Exercise 2b.4)* Define `fm_loss_late` with
+# 3. **Lower the SNR.** Set `AMP = 0.5` and re-run everything from the top of
+#    Part 4. With a weaker signal the likelihood grows competitive secondary
+#    maxima, and the zoom sometimes locks onto one and shrinks around it
+#    confidently — in our tests, roughly one run in three. This is *the*
+#    failure mode of sequential inference: it is not that the posterior is
+#    wide, it is that it is narrow and wrong. What would you monitor to catch
+#    it without knowing the answer?
+# 4. **Fix the over-confidence.** Implement the $L^{-\gamma}$ reweighting
+#    described above: draw from `qc`, evaluate `fm_logprob` under `qc` and
+#    `qm`, and resample with weights $\exp(-\gamma(\log q_c - \log q_m))$.
+#    Does the final width move toward the black contours?
+# 5. *(bonus, from Exercise 2b.4)* Define `fm_loss_late` with
 #    `t = torch.rand(...) ** (1/8)` for half the batch and pass it as
 #    `loss_fn=`. At LISA scale this one-line change moved our posteriors from
 #    "16 nats too wide" to "1 nat from mathematically optimal".
