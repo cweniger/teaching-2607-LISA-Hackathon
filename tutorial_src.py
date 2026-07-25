@@ -236,6 +236,9 @@ fig.tight_layout()
 #   true $\sigma$ (the network learns $f$; the residuals become pure noise),
 #   then keeps sinking below it — the network is absorbing noise into the fit.
 #   The moment $\hat\sigma$ crosses $\sigma$ is the moment memorization begins.
+# - *Order matters:* the noise-chasing wiggles are high-frequency, and they
+#   appear only late — MLPs fit smooth structure first (**spectral bias**).
+#   That is why early stopping works: it keeps the signal, drops the noise.
 #
 # **Exercise 1a — read the plot.**
 # 1. Which of the two fits in the left panel would you trust to predict $y$ at
@@ -316,31 +319,6 @@ def fit_early(net, x, y, x_val, y_val, epochs, lr=1e-3, patience=300):  # noqa: 
 
 net_es = MLP(WIDTH)
 hist_es = fit_early(net_es, x, y, x_val, y_val, 100_000)  # epochs: huge, on purpose
-
-# %% [markdown]
-# ## A second failure mode: spectral bias
-#
-# Overfitting is the network learning *too much*; **spectral bias** is it
-# learning *in a particular order*. MLPs fit **low-frequency** structure
-# first and high-frequency structure (much) later: the smooth backbone of
-# $f$ appears within a few hundred epochs, while sharp features and fast
-# oscillations take thousands — or never arrive at all.
-#
-# You can see it in this very example. The early-stopped fit above is
-# smooth and already sinusoidal; the noise-chasing wiggles of the final fit —
-# high-frequency by nature — only develop late in training. That ordering is
-# part of why early stopping works so well: stopping early keeps the low
-# frequencies (the signal) and discards the high ones (the noise).
-#
-# *Try it:* replace `2 * np.pi * x` by `8 * np.pi * x` in `make_data`, set
-# `N_TRAIN = 200`, and retrain. Even with plenty of clean-ish data the
-# network first fits a nearly flat line, and needs far more epochs before the
-# fast oscillation appears. Scaling the network up postpones the failure to
-# higher frequencies but does not remove it.
-#
-# Spectral bias returns at LISA scale: a razor-sharp posterior is a
-# "high-frequency" object in parameter space, and the late-time training
-# trick of Exercise 3.3 exists precisely to fight this.
 
 # %% [markdown]
 # ---
