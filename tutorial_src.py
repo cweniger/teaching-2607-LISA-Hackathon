@@ -40,31 +40,99 @@ print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for 
 # nonlinearities. It can approximate any smooth function — including the noise
 # in your training data, which is the failure mode called **overfitting**.
 #
-# We fit $y = \sin(2\pi x)$ from a handful of noisy points.
+# **The generative model.** Our data are $N$ noisy observations of a smooth
+# function $f$:
+# $$y_i = f(x_i) + \epsilon_i, \qquad f(x) = \sin(2\pi x), \qquad
+#   \epsilon_i \sim \mathcal N(0, \sigma^2),$$
+# with inputs $x_i \sim U(-1, 1)$ and noise level $\sigma = 0.15$. The network
+# only ever sees the pairs $(x_i, y_i)$ — it knows neither $f$ nor which part
+# of each $y_i$ is signal and which part is noise $\epsilon_i$.
 
 # %%
-def make_data(n, noise=0.15, seed=0):
-    g = torch.Generator().manual_seed(seed)
-    x = torch.rand(n, 1, generator=g) * 2 - 1
-    y = torch.sin(2 * np.pi * x) + noise * torch.randn(n, 1, generator=g)
+def make_data(n, sigma=0.15, seed=0):
+    """n samples of the generative model  y = sin(2 pi x) + epsilon."""
+    torch.manual_seed(seed)
+    x = torch.rand(n, 1) * 2 - 1                         # x_i ~ U(-1, 1)
+    y = torch.sin(2 * np.pi * x) + sigma * torch.randn(n, 1)  # y_i = f(x_i) + eps_i
     return x, y
 
+# %% [markdown]
+# ## The network
+#
+# The MLP below maps one input number to one output number through three
+# hidden layers. Each layer is an affine map $h \mapsto Wh + b$ (`nn.Linear`)
+# followed by the elementwise nonlinearity $\mathrm{ReLU}(z) = \max(z, 0)$.
+# The entries of the weight matrices $W$ and bias vectors $b$ are the
+# trainable parameters. The `forward` method spells out, step by step, what
+# happens to a batch of inputs.
 
-def mlp(d_in, d_out, hidden, layers):
-    mods, d = [], d_in
-    for _ in range(layers):
-        mods += [nn.Linear(d, hidden), nn.ReLU()]
-        d = hidden
-    return nn.Sequential(*mods, nn.Linear(d, d_out))
+# %%
+class MLP(nn.Module):
+    """y = MLP(x): three hidden ReLU layers, one linear read-out."""
 
+    def __init__(self, hidden):
+        super().__init__()
+        self.fc1 = nn.Linear(1, hidden)       # W1: (hidden, 1),      b1: (hidden,)
+        self.fc2 = nn.Linear(hidden, hidden)  # W2: (hidden, hidden), b2: (hidden,)
+        self.fc3 = nn.Linear(hidden, hidden)  # W3: (hidden, hidden), b3: (hidden,)
+        self.out = nn.Linear(hidden, 1)       # W4: (1, hidden),      b4: (1,)
 
-def fit(net, x, y, x_val, y_val, epochs, lr=3e-3):
-    opt = torch.optim.Adam(net.parameters(), lr=lr)
+    def forward(self, x):            # x: (n, 1) — n points, 1 input feature
+        h = torch.relu(self.fc1(x))  # W1 @ x + b1, then ReLU   -> (n, hidden)
+        h = torch.relu(self.fc2(h))  # W2 @ h + b2, then ReLU   -> (n, hidden)
+        h = torch.relu(self.fc3(h))  # W3 @ h + b3, then ReLU   -> (n, hidden)
+        y = self.out(h)              # W4 @ h + b4, NO ReLU     -> (n, 1)
+        return y                     # the predicted y for each input point
+
+# %% [markdown]
+# ## How the fit works
+#
+# We measure how well the network reproduces the training data with the
+# **mean squared error** loss,
+# $$\mathcal L(W, b) = \frac{1}{N} \sum_{i=1}^{N}
+#   \big(\mathrm{MLP}_{W,b}(x_i) - y_i\big)^2 ,$$
+# and minimize it over *all* weights and biases at once. The algorithm is
+# **gradient descent**:
+#
+# 1. Collect the trainable parameters — every $W$ and $b$ of the network —
+#    and hand them to the optimizer.
+# 2. Repeat for `epochs` iterations:
+#    1. **forward pass** — push all training $x_i$ through the network and
+#       compute the scalar loss $\mathcal L$;
+#    2. **backward pass** — compute the gradient of $\mathcal L$ with respect
+#       to every parameter, $\partial\mathcal L/\partial W$,
+#       $\partial\mathcal L/\partial b$, by backpropagation (`loss.backward()`);
+#    3. **update** — move every parameter a small step *against* its
+#       gradient, $\theta \leftarrow \theta - \eta\, \nabla_\theta \mathcal L$,
+#       with learning rate $\eta$.
+#
+# We use **Adam**, a gradient-descent variant that adapts the step size per
+# parameter — but the loop structure is exactly the three steps above.
+
+# %%
+def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
+    # net.parameters() is the collection of all trainable tensors of the
+    # network — the W's and b's of the four Linear layers. optim.Adam simply
+    # holds pointers to these tensors: "training" means updating them in place.
+    print('parameters handed to the optimizer:')
+    for name, p in net.named_parameters():
+        print(f'  {name:12s} {tuple(p.shape)}')
+    print(f'total: {sum(p.numel() for p in net.parameters())} numbers\n')
+    # (eps damps Adam's adaptive step once the training gradients get tiny —
+    # without it, full-batch Adam on 20 points goes unstable late in training)
+    opt = torch.optim.Adam(net.parameters(), lr=lr, eps=1e-3)
+
     hist = []
     for ep in range(epochs):
+        # forward pass: predictions on the training set -> scalar loss L
         loss = ((net(x) - y) ** 2).mean()
-        opt.zero_grad(); loss.backward(); opt.step()
-        with torch.no_grad():
+        # reset all gradients to zero (PyTorch *accumulates* them by default)
+        opt.zero_grad()
+        # backward pass: fills p.grad = dL/dp for every parameter p
+        loss.backward()
+        # gradient step: update every parameter in place using its .grad
+        opt.step()
+        with torch.no_grad():   # book-keeping only — no gradients needed
             hist.append((loss.item(), ((net(x_val) - y_val) ** 2).mean().item()))
     return np.array(hist)
 
@@ -73,7 +141,7 @@ N_TRAIN, WIDTH, EPOCHS = 20, 256, 6000          # <-- the knobs for Exercise 1
 
 x, y = make_data(N_TRAIN)
 x_val, y_val = make_data(200, seed=1)
-net = mlp(1, 1, WIDTH, 3)
+net = MLP(WIDTH)
 hist = fit(net, x, y, x_val, y_val, EPOCHS)
 
 xg = torch.linspace(-1, 1, 400)[:, None]
@@ -153,6 +221,16 @@ def plot_truth(ax):
     ax.set(xlim=(-2, 2), ylim=(-2, 2), xlabel=r'$\theta_1$', ylabel=r'$\theta_2$')
 
 # %%
+# Generic MLP helper for the rest of the notebook: same idea as Part 1's MLP
+# class, but with configurable input/output dimensions and depth.
+def mlp(d_in, d_out, hidden, layers):
+    mods, d = [], d_in
+    for _ in range(layers):
+        mods += [nn.Linear(d, hidden), nn.ReLU()]
+        d = hidden
+    return nn.Sequential(*mods, nn.Linear(d, d_out))
+
+
 # Gaussian posterior head: x -> (mu, Cholesky of covariance), trained by
 # maximizing the Gaussian log-likelihood of the true theta.
 gnet = mlp(2, 5, 128, 3).to(dev)                    # 2 mean + 3 Cholesky numbers
