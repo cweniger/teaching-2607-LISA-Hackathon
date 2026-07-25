@@ -20,6 +20,7 @@
 # > cells top to bottom. Everything also works on CPU, just slower.
 
 # %%
+import copy
 import time
 
 import numpy as np
@@ -91,26 +92,43 @@ class MLP(nn.Module):
 # **mean squared error** loss,
 # $$\mathcal L(W, b) = \frac{1}{N} \sum_{i=1}^{N}
 #   \big(\mathrm{MLP}_{W,b}(x_i) - y_i\big)^2 ,$$
-# and minimize it over *all* weights and biases at once. The algorithm is
-# **gradient descent**:
+# and minimize it over *all* weights and biases at once by **gradient
+# descent**:
 #
-# 1. Collect the trainable parameters — every $W$ and $b$ of the network —
-#    and hand them to the optimizer.
-# 2. Repeat for `epochs` iterations:
-#    1. **forward pass** — push all training $x_i$ through the network and
-#       compute the scalar loss $\mathcal L$;
-#    2. **backward pass** — compute the gradient of $\mathcal L$ with respect
-#       to every parameter, $\partial\mathcal L/\partial W$,
-#       $\partial\mathcal L/\partial b$, by backpropagation (`loss.backward()`);
-#    3. **update** — move every parameter a small step *against* its
-#       gradient, $\theta \leftarrow \theta - \eta\, \nabla_\theta \mathcal L$,
-#       with learning rate $\eta$.
+# ```text
+# ALGORITHM  fit(net, {(x_i, y_i)}, epochs, eta)
+# ──────────────────────────────────────────────────────────────
+# phi ← all trainable parameters of net (every W and b)
+# opt ← Adam(phi, learning rate eta)      # opt holds pointers to phi
+#
+# for epoch = 1 … epochs:
+#     y_pred_i ← net(x_i)   for all i     # forward pass
+#     L  ← (1/N) Σ_i (y_pred_i − y_i)²    # scalar loss
+#     g  ← ∂L/∂phi                        # backward pass (backpropagation)
+#     phi ← phi − eta·g                   # update phi in place (Adam variant)
+#
+# return net                              # phi now (locally) minimizes L
+# ──────────────────────────────────────────────────────────────
+# ```
 #
 # We use **Adam**, a gradient-descent variant that adapts the step size per
-# parameter — but the loop structure is exactly the three steps above.
+# parameter — the loop structure is exactly the one above.
+#
+# While training runs we monitor three diagnostics every epoch:
+#
+# - the **training loss** $\mathcal L$ itself;
+# - two **validation losses**: one on a second *noisy* data set (what you
+#   have in a real experiment), and one against the *noise-free* truth
+#   $f$ on a dense grid (a luxury only a toy problem offers);
+# - a **noise estimate** $\hat\sigma = \sqrt{\mathcal L}$, the RMS residual
+#   on the training points. If the network had learned $f$ exactly, the
+#   residuals would be pure noise and $\hat\sigma = \sigma = 0.15$. Watch
+#   what happens instead: $\hat\sigma$ keeps dropping *below* $\sigma$ —
+#   the network increasingly explains the noise as if it were signal.
+#   That is overfitting, condensed into a single number.
 
 # %%
-def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
+def fit(net, x, y, x_val, y_val, x_clean, y_clean, epochs, lr=1e-3):
     # net.parameters() is the collection of all trainable tensors of the
     # network — the W's and b's of the four Linear layers. optim.Adam simply
     # holds pointers to these tensors: "training" means updating them in place.
@@ -123,6 +141,8 @@ def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
     opt = torch.optim.Adam(net.parameters(), lr=lr, eps=1e-3)
 
     hist = []
+    best_val = best_clean = np.inf
+    snap_val = snap_clean = None
     for ep in range(epochs):
         # forward pass: predictions on the training set -> scalar loss L
         loss = ((net(x) - y) ** 2).mean()
@@ -133,37 +153,111 @@ def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
         # gradient step: update every parameter in place using its .grad
         opt.step()
         with torch.no_grad():   # book-keeping only — no gradients needed
-            hist.append((loss.item(), ((net(x_val) - y_val) ** 2).mean().item()))
-    return np.array(hist)
+            val = ((net(x_val) - y_val) ** 2).mean()          # noisy held-out set
+            clean = ((net(x_clean) - y_clean) ** 2).mean()    # noise-free truth
+            sigma_hat = loss.sqrt()             # RMS train residual = noise estimate
+            hist.append((loss.item(), val.item(), clean.item(), sigma_hat.item()))
+            # keep a copy of the weights whenever a validation loss improves —
+            # these snapshots are the networks early stopping would return
+            if val < best_val:
+                best_val, snap_val = val.item(), copy.deepcopy(net.state_dict())
+            if clean < best_clean:
+                best_clean, snap_clean = clean.item(), copy.deepcopy(net.state_dict())
+        if (ep + 1) % 1000 == 0:
+            print(f'epoch {ep + 1:5d}:  train {loss:.4f}   val {val:.4f}   '
+                  f'clean {clean:.4f}   sigma_hat {sigma_hat:.3f}  (true sigma 0.15)')
+    return np.array(hist), snap_val, snap_clean
 
 # %%
 N_TRAIN, WIDTH, EPOCHS = 20, 256, 6000          # <-- the knobs for Exercise 1
+SIGMA = 0.15
 
-x, y = make_data(N_TRAIN)
-x_val, y_val = make_data(200, seed=1)
+x, y = make_data(N_TRAIN, sigma=SIGMA)
+x_val, y_val = make_data(200, sigma=SIGMA, seed=1)
+xg = torch.linspace(-1, 1, 400)[:, None]        # dense grid ...
+y_true = torch.sin(2 * np.pi * xg)              # ... with the noise-free truth
 net = MLP(WIDTH)
-hist = fit(net, x, y, x_val, y_val, EPOCHS)
+hist, snap_val, snap_clean = fit(net, x, y, x_val, y_val, xg, y_true, EPOCHS)
 
-xg = torch.linspace(-1, 1, 400)[:, None]
-fig, ax = plt.subplots(1, 2, figsize=(11, 3.6))
-ax[0].plot(xg, np.sin(2 * np.pi * xg), 'k--', lw=1, label='truth')
-ax[0].plot(xg, net(xg).detach(), 'C1', label='MLP')
+# %%
+# the networks an early-stopper would have kept
+net_val, net_clean = MLP(WIDTH), MLP(WIDTH)
+net_val.load_state_dict(snap_val)
+net_clean.load_state_dict(snap_clean)
+
+fig, ax = plt.subplots(1, 2, figsize=(12.5, 4.2))
+ax[0].plot(xg, y_true, 'k--', lw=1, label='truth')
 ax[0].plot(x, y, 'C0o', ms=5, label='train data')
-ax[0].set(xlabel='x', ylabel='y'); ax[0].legend()
+ax[0].plot(xg, net(xg).detach(), 'C1', lw=1.8,
+           label=f'final fit (epoch {EPOCHS})')
+ax[0].plot(xg, net_val(xg).detach(), 'C2', lw=1.2,
+           label=f'best noisy-val fit (epoch {hist[:, 1].argmin() + 1})')
+ax[0].plot(xg, net_clean(xg).detach(), 'C3', lw=1.2,
+           label=f'best clean-val fit (epoch {hist[:, 2].argmin() + 1})')
+ax[0].set(xlabel='x', ylabel='y'); ax[0].legend(fontsize=8)
 ax[1].semilogy(hist[:, 0], label='train loss')
-ax[1].semilogy(hist[:, 1], label='validation loss')
-ax[1].set(xlabel='epoch', ylabel='MSE'); ax[1].legend()
+ax[1].semilogy(hist[:, 1], label='validation loss (noisy)')
+ax[1].semilogy(hist[:, 2], label='validation loss (clean truth)')
+ax[1].axhline(SIGMA ** 2, color='gray', ls=':', lw=1, label=r'noise floor $\sigma^2$')
+ax[1].semilogy(hist[:, 3], 'C4', label=r'$\hat\sigma$ (RMS train residual)')
+ax[1].axhline(SIGMA, color='r', ls='--', lw=1, label=r'true $\sigma = 0.15$')
+ax[1].set(xlabel='epoch', ylabel=r'MSE  /  $\hat\sigma$')
+ax[1].legend(fontsize=8, ncol=2)
 fig.tight_layout()
 
 # %% [markdown]
+# **Reading the two panels.**
+# - *Left:* the final fit threads the noisy points and invents wiggles between
+#   them; the two early-stopped fits (best validation epochs) are smooth and
+#   close to the truth — those are the networks you *should* have kept.
+# - *Right:* the **clean** validation curve (vs the noise-free truth) shows the
+#   textbook overfitting U-turn: it falls, bottoms out, and rises again as the
+#   network trades truth for noise. The **noisy** validation curve — the only
+#   one you have in a real experiment — shows the same turn but sits on the
+#   noise floor $\sigma^2$: even a perfect fit of $f$ cannot predict the noise
+#   in the held-out points. The noise estimate $\hat\sigma$ first drops toward
+#   the true $\sigma$ (the network learns $f$; the residuals become pure
+#   noise), then keeps sinking below it — from here on the network is absorbing
+#   the noise into the fit. The moment $\hat\sigma$ crosses $\sigma$ is the
+#   moment memorization begins.
+#
 # **Exercise 1.** Play with the three knobs above and answer:
 # 1. Make the network *overfit badly* (hint: few points, wide net, many
-#    epochs). How do you *see* it in the two panels — in the fit, and in the
-#    train-vs-validation curves?
-# 2. Now make it *underfit* (hint: `WIDTH=2` or `EPOCHS=100`).
-# 3. Where would you stop training if you could only watch the curves? This —
-#    **early stopping on a validation set** — is how every later part of this
-#    notebook decides when to stop.
+#    epochs). How do you *see* it in each panel — the fit, the loss curves,
+#    and $\hat\sigma$?
+# 2. Now make it *underfit* (hint: `WIDTH=2` or `EPOCHS=100`). Where does
+#    $\hat\sigma$ get stuck, and why above $\sigma$?
+# 3. The noisy validation loss never drops below $\sigma^2 \approx 0.023$ —
+#    why not? (In a real experiment, where the clean curve is unavailable,
+#    this floor is all you get.)
+# 4. Where would you stop training if you could only watch the noisy curves?
+#    This — **early stopping on a validation set** — is how every later part
+#    of this notebook decides when to stop.
+
+# %% [markdown]
+# ## A second failure mode: spectral bias
+#
+# Overfitting is the network learning *too much*; **spectral bias** is it
+# learning *in a particular order*. MLPs fit **low-frequency** structure
+# first and high-frequency structure (much) later: the smooth backbone of
+# $f$ appears within a few hundred epochs, while sharp features and fast
+# oscillations take thousands — or never arrive at all.
+#
+# You can see it in this very example. The early-stopped fits above are
+# smooth and already sinusoidal; the noise-chasing wiggles of the final fit —
+# high-frequency by nature — only develop late in training. That ordering is
+# part of why early stopping works so well: stopping early keeps the low
+# frequencies (the signal) and discards the high ones (the noise).
+#
+# *Try it:* replace `2 * np.pi * x` by `8 * np.pi * x` in `make_data`, set
+# `N_TRAIN = 200`, and retrain. Even with plenty of clean-ish data the
+# network first fits a nearly flat line, and needs far more epochs before the
+# fast oscillation appears. Scaling the network up postpones the failure to
+# higher frequencies but does not remove it.
+#
+# Spectral bias returns at LISA scale: a razor-sharp posterior is a
+# "high-frequency" object in parameter space, and the late-time training
+# trick of Exercise 3.3 exists precisely to fight this.
 
 # %% [markdown]
 # ---
