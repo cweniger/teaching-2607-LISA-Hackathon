@@ -497,7 +497,7 @@ for name, (r, sg) in res.items():
 # %% [markdown]
 
 # ---
-# # Part 2 — Modeling distributions with flow matching  *(~35 min)*
+# # Part 2 — Modeling distributions with flow matching
 
 # %% [markdown]
 
@@ -856,7 +856,7 @@ study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
 # %% [markdown]
 
 # ---
-# # Part 3 — From generative models to inference: SBI  *(~15 min)*
+# # Part 3 — From generative models to inference: SBI
 #
 # Here is the whole idea of simulation-based inference, in one sentence:
 # **take conditional flow matching and feed it pairs from a simulator.**
@@ -1133,7 +1133,7 @@ fig.tight_layout()
 # %% [markdown]
 
 # ---
-# # Part 4 — A toy gravitational wave: compression + sequential zoom  *(~30 min)*
+# # Part 4 — A toy gravitational wave: compression + sequential zoom
 #
 # Now the data looks like *our* data: a long noisy time series containing a
 # chirp,
