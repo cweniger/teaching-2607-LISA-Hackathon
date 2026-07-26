@@ -13,8 +13,8 @@
 # | 4 | a toy gravitational wave | data compression + **sequential** inference |
 #
 # Each part fixes the visible failure of the one before. All code is plain
-# PyTorch, and the companion notebook `lisa_sequential_new.ipynb` runs the very
-# same functions on real LISA data.
+# PyTorch, and the companion notebook `lisa_sequential_new.ipynb` runs the 
+# same algorithms on real LISA data.
 #
 # > **Colab setup:** Runtime → Change runtime type → **T4 GPU**, then run all
 # > cells top to bottom. Everything also works on CPU, just slower.
@@ -36,11 +36,9 @@ print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for 
 
 # %% [markdown]
 # ---
-# # Part 1 — Neural networks: fitting functions  *(~25 min)*
+# # Part 1 — Neural networks as fitting functions  *(~25 min)*
 #
 # ## The network
-#
-# Before any statistics, we need the object everything else is built from.
 #
 # A **multi-layer perceptron** (MLP) is a computer program that turns an input
 # vector into an output vector. The same object is called a *feed-forward
@@ -50,9 +48,11 @@ print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for 
 # all MLPs with extra structure bolted on, and every one of them still has
 # ordinary dense layers inside.
 #
-# The program is a chain of **affine maps**, each followed by an elementwise
-# **nonlinearity** $g$. For an input $x \in \mathbb R^{d_{\rm in}}$, three
-# hidden layers of width $H$, and an output in $\mathbb R^{d_{\rm out}}$:
+# The program is a chain of **affine maps** (linear transformations with an added constant shift),
+# each followed by a
+# **nonlinearity** $g$, applied to each vector component separately.
+# For an input $x \in \mathbb R^{d_{\rm in}}$, three
+# hidden layers of width $H$, and an output in $\mathbb R^{d_{\rm out}}$, this looks like:
 #
 # $$\begin{aligned}
 #   h^{(1)} &= g\big(W^{(1)} x + b^{(1)}\big),
@@ -80,7 +80,11 @@ print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for 
 # - **Initialization.** `nn.Linear` fills each $W$ and $b$ with small random
 #   numbers (uniform in $\pm 1/\sqrt{\text{fan-in}}$ by default), so an
 #   untrained network is already a perfectly valid — just useless — function.
-#   Training is nothing more than moving those numbers.
+#   Training is nothing more than moving those numbers around - often just very little - 
+#   until the computer program does approximately what you want.
+
+TODO: Above, define fan-in
+TODO: After this markdown cell, add a plot that shows different activation functions (ReLU, tanh, GELU, SELU) applied to a range of input values. This will help visualize how each activation function behaves and their differences.
 
 # %%
 class MLP(nn.Module):
@@ -107,60 +111,70 @@ class MLP(nn.Module):
 # gradient descent will shape.
 
 # %%
-xg = torch.linspace(-1, 1, 400)[:, None]        # a grid of 400 inputs, shape (400, 1)
+xg = torch.linspace(-5, 5, 400)[:, None]        # a grid of 400 inputs, shape (400, 1)
 
 fig, ax = plt.subplots(figsize=(6.5, 3.2))
-for s in range(3):
+for s in range(10):
     torch.manual_seed(s)
     ax.plot(xg, MLP(1, 1, hidden=256)(xg).detach(), lw=1.2, label=f'seed {s}')
 ax.set(xlabel='x', ylabel=r'$\hat y$', title='untrained networks are random functions')
 ax.legend(fontsize=8)
 fig.tight_layout()
 
+TODO: Add following this plot a brief discussion that one can see that the
+interesting function behaviour happns fo rthis initialisation at input and
+output values around one, and that outside of x ~ O(1) values the behavious is
+linear. Networks work best when being fed with normalized inputs (mean zero,
+variance one). [write this in some very compact meaningful way]
+
+
 # %% [markdown]
 # ## Fitting with gradient descent
 #
 # Given input–output pairs $(x_i, y_i)$, we want the network to reproduce
-# them. Quantify the mismatch with the **mean squared error**,
+# them. In simple situations, one can quantify the mismatch with the **mean squared error**,
 #
 # $$\mathcal L(\phi) = \frac{1}{N} \sum_{i=1}^{N}
 #   \big\|\,\mathrm{MLP}_\phi(x_i) - y_i\,\big\|^2 ,$$
 #
-# and minimize it over all weights and biases at once by **gradient descent**
-# — an iterative update that repeatedly steps in the direction of steepest
+# and optimise the network by minimizing it over all weights and biases [TODO: refer to the W and b components explicitly here] at once by **gradient descent**.
+# SG is an iterative update that repeatedly steps in the direction of steepest
 # descent,
 #
 # $$\phi_{k+1} = \phi_k - \eta\, \nabla_\phi \mathcal L(\phi_k),
 #   \qquad k = 0, 1, 2, \dots$$
 #
-# starting from the random initialization $\phi_0$, with **learning rate**
-# $\eta$ setting the step size. Each iteration $k$ is one *epoch* below:
+# starting from the random initialization $\phi_0$ discussed above, with an adjustable **learning rate**
+# $\eta$, which sets the step size. Each iteration $k$ over the full set of $N$ training examples is one *epoch* below:
 #
 # ```text
 # ALGORITHM  fit(net, {(x_i, y_i)}, epochs, eta)
 # ──────────────────────────────────────────────────────────────
 # phi ← all trainable parameters of net (every W and b)
-# opt ← Adam(phi, learning rate eta)      # opt holds pointers to phi
+# opt ← Adam(phi, learning rate eta)      # optimizer: holds pointers to phi
 #
 # for epoch = 1 … epochs:
-#     y_pred_i ← net(x_i)   for all i     # forward pass
-#     L  ← (1/N) Σ_i ||y_pred_i − y_i||²  # scalar loss
-#     g  ← ∂L/∂phi                        # backward pass (backpropagation)
-#     phi ← phi − eta·g                   # update phi in place (Adam variant)
+#     y_pred_i ← net(x_i)   for all i     # forward pass (running the computer program aka network)
+#     L  ← (1/N) Σ_i ||y_pred_i − y_i||²  # scalar loss (calculating the MSE)
+#     g  ← ∂L/∂phi                        # backward pass (calculating the gradient of the loss w.r.t. the parameters)
+#     phi ← phi − eta·g                   # update phi in place (done by the optimizer, here Adam)
 #
 # return net                              # phi now (locally) minimizes L
 # ──────────────────────────────────────────────────────────────
 # ```
 #
 # We use **Adam**, a gradient-descent variant that adapts the step size per
-# parameter — the loop structure is exactly the one above. Alongside the
-# training loss we track a **validation loss**: the same MSE on held-out data
-# the network never trains on, which measures generalization rather than
-# memorization.
+# parameter to the loss surface — the loop structure is exactly the one above. 
+# 
+# **Avoiding overfitting through validation:** In practice, alongside the
+# training loss, we would track a **validation loss**: the same MSE but calculated on held-out data
+# the network never trains on. It measures how well the network generalizes to unseen inputs, which is the ultimate goal.
+# The validation loss typically bottoms out and then rises again as the network starts to memorize the training data, which is a sign of overfitting.
 
 # %%
 def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
     # net.parameters() is the collection of all trainable tensors of the
+    # TODO: We should move the net.parameters() story out of here and move it up just after the network is defined. This cleans up what is going on here.
     # network — the W's and b's of the four Linear layers. optim.Adam simply
     # holds pointers to these tensors: "training" means updating them in place.
     print('parameters handed to the optimizer:')
@@ -174,27 +188,33 @@ def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
     hist, best_val, snap_val = [], np.inf, None
     for ep in range(epochs):
         # forward pass: predictions on the training set -> scalar loss L
+        # TODO: Split this in forward y_hat calculation and loss function calculation  steps on individual lines
         loss = ((net(x) - y) ** 2).mean()
-        # reset all gradients to zero (PyTorch *accumulates* them by default)
-        opt.zero_grad()
+
         # backward pass: fills p.grad = dL/dp for every parameter p
+        opt.zero_grad()  # reset gradients calculation (PyTorch *accumulates* them by default)
         loss.backward()
+
         # gradient step: update every parameter in place using its .grad
         opt.step()
-        with torch.no_grad():   # book-keeping only — no gradients needed
+
+        # book-keeping only — no gradients needed
+        with torch.no_grad():
             val = ((net(x_val) - y_val) ** 2).mean()
             hist.append((loss.item(), val.item()))
             # keep a copy of the weights whenever the validation loss improves
             if val < best_val:
                 best_val, snap_val = val.item(), copy.deepcopy(net.state_dict())
-        if (ep + 1) % 1000 == 0:
+
+        # print progress every 200 epochs
+        if (ep + 1) % 200 == 0:
             print(f'epoch {ep + 1:5d}:  train {loss:.4f}   val {val:.4f}')
     return np.array(hist), snap_val
 
 # %% [markdown]
 # ## Example: approximating a trigonometric function
 #
-# **The generative model.** Our data are $N$ noisy observations of a smooth
+# **The "generative model".** As an example, let our data be $N$ noisy observations of a smooth
 # function $f$:
 # $$y_i = f(x_i) + \epsilon_i, \qquad f(x) = \sin(2\pi x), \qquad
 #   \epsilon_i \sim \mathcal N(0, \sigma^2),$$
@@ -211,19 +231,22 @@ def make_data(n, sigma=0.2, seed=0):
     return x, y
 
 # %% [markdown]
-# Draw the data and *look at it first* — always. The dashed curve and the
+# Drawing the data and looking at it is good practice. The dashed curve and the
 # shaded band are the generative model above; the network will only ever see
 # the blue dots. (The gray dots are a second, held-out draw used for
 # validation — the network never trains on them.)
 
 # %%
-N_TRAIN, SIGMA = 30, 0.2                        # <-- data knobs
-WIDTH, EPOCHS = 256, 3000                       # <-- network knobs
+WIDTH, EPOCHS = 256, 3000                       # <-- network knobs (how wide, how long to train)
+N_TRAIN, SIGMA = 30, 0.2                        # <-- data knobs (how much, how noisy)
 
-x, y = make_data(N_TRAIN, sigma=SIGMA)                # training set
-x_val, y_val = make_data(200, sigma=SIGMA, seed=1)    # held-out set
-y_true = torch.sin(2 * np.pi * xg)                    # noise-free truth on the grid
+x, y = make_data(N_TRAIN, sigma=SIGMA)                # generate training set
+x_val, y_val = make_data(200, sigma=SIGMA, seed=1)    # held-out set for validation
 
+xg = torch.linspace(-1, 1, 400)[:, None]              # a grid of 400 inputs, shape (400, 1)
+y_true = torch.sin(2 * np.pi * xg)                    # noise-free truth on the grid for plotting
+
+# Plot the data and the truth
 fig, ax = plt.subplots(figsize=(7.5, 3.8))
 ax.fill_between(xg[:, 0], y_true[:, 0] - SIGMA, y_true[:, 0] + SIGMA,
                 color='k', alpha=.10, lw=0, label=r'$f(x) \pm \sigma$')
@@ -236,11 +259,15 @@ ax.legend(fontsize=9)
 fig.tight_layout()
 
 # %%
-net = MLP(1, 1, WIDTH)                          # try act=torch.tanh
+# Instantiate a fresh network.
+net = MLP(1, 1, WIDTH)
+
+# Train it on the noisy data, tracking the losses (hist) and remembering the best weights (snap_val).
 hist, snap_val = fit(net, x, y, x_val, y_val, EPOCHS)
 
 # %%
-net_best = MLP(1, 1, WIDTH)                     # the weights at the best epoch
+# initialize a new network and load the weights at the best epoch
+net_best = MLP(1, 1, WIDTH)
 net_best.load_state_dict(snap_val)
 
 fig, ax = plt.subplots(1, 2, figsize=(12.5, 4.2))
@@ -258,33 +285,28 @@ ax[1].legend(fontsize=8)
 fig.tight_layout()
 
 # %% [markdown]
-# **Reading the two panels.**
+# **Interpreting the two panels.**
 # - *Left:* the final fit passes through every noisy point and invents
-#   structure between them that is not in $f$. The early-stopped fit — the same
-#   network as it stood at its best validation epoch — is smoother and closer
-#   to the truth. That is the network you should have kept.
+#   structure between them that is not in $f$. The 
+#   network as it stood at its best validation epoch is smoother and closer
+#   to the truth. That is the network one typically keeps.
 # - *Right:* the training loss falls indefinitely, because on the training
 #   points more optimization is always rewarded. The validation loss instead
-#   bottoms out and turns back up; everything after that minimum is the
+#   bottoms out and turns back up (although the effect is for this example quite small).
+#   Everything after that minimum can be interpreted a the
 #   network memorizing noise, which makes predictions on new data worse. This
-#   is **overfitting**. Note also that the validation loss can never go below
-#   the noise floor $\sigma^2$: no fit of $f$, however perfect, predicts the
-#   noise in held-out points.
-# - *Order matters:* the noise-chasing wiggles are high-frequency and appear
-#   only late — networks fit smooth structure first (**spectral bias**). That
-#   is why early stopping works: the signal arrives early and the noise late.
+#   is **overfitting**. 
+# - *Spectral bias:* the noise-chasing wiggles are high-frequency and appear
+#   only later in the fit — MLPs fit smooth structure first (**spectral bias**). That
+#   is why early stopping works: large scale features and trends in the data are
+#   picked up first, and the noise later, which is cut off by stopping early based on the validation loss.
 #
-# **Exercise 1a — read the plot.**
-# 1. Which of the two fits would you trust to predict $y$ at a new $x$ — and
-#    how could you make that choice in a *real* experiment, where the truth
-#    (black dashed) is not available?
-# 2. Where on the loss curves do the two fits live? What is the training loss
-#    doing at the epoch where validation is best?
-# 3. Why can the validation loss never drop below $\sigma^2 = 0.04$, even for a
-#    network that has learned $f$ perfectly?
-# 4. *(bonus)* Rebuild with a smooth activation, `MLP(1, 1, WIDTH,
+# **Exercise 1a.**
+# 1. Rebuild with a smooth activation, `MLP(1, 1, WIDTH,
 #    act=torch.tanh)`, and retrain. How does the *character* of the
 #    overfitting change?
+TODO: We should discuss interactively what are good options for this exercises, I removed some of the questions, since they basically just repeat what was written above
+    Maybe we could just provide code example where students can easily change number of data points and refit until early stopping, and they can select different acitvation fucntions. Keep it very light. Exercise 1b is then about their own functions.
 
 # %%
 # @title Answers to 1a { display-mode: "form" }
@@ -371,6 +393,9 @@ def my_function(x):                             # noqa: F811
     return torch.sin(2 * np.pi * x * (1 + 2 * (x + 1))) + torch.exp(-60 * (x - 0.1) ** 2)
 
 
+TODO: This study function code should be defined earlier on above the my_function
+TODO: Seeing this exercise 1b, maybe we can just drop 1a entirely?  Not sure how much value it brings.  We can merge the activation function story with this here, if we provide an appropriate arguemtn for study_function
+TODO: study_function should be again better documents, break the code in separate code blocks separated by a white line, with a short "# comment" on top. Keep it tidy, but it shouldn't just be a wall of text.
 # %%
 # Provided: noisy data from my_function, an early-stopped fit, and the plot.
 def study_function(fn, n_train=N_TRAIN, sigma=SIGMA, width=WIDTH, seed=0):
@@ -398,29 +423,25 @@ study_function(my_function)
 
 
 # %% [markdown]
-# ## A harder shape: many numbers in, one parameter out
+# ## Applying MLPs to high-dimensional inputs: many numbers in, one parameter out
 #
 # So far the input was a single number. Nothing in the network required that —
-# `MLP(30, 1, ...)` maps a 30-dimensional vector to a scalar just as happily —
-# and *that* is the shape of every problem in the rest of this tutorial:
-# **a lot of data in, a few parameters out.**
+# an instantiated `MLP(30, 1, ...)` maps a 30-dimensional vector to a scalar just as happily:
+# high-dimensional data in, low-dimensional parameter out.
 #
-# Here is the smallest honest version. A sine of unknown frequency $\nu$ is
+# As a simple example, let us consider a sine of unknown frequency $\nu$,
 # sampled at 30 fixed times and buried in noise:
 #
 # $$d_j = \sin(2\pi\,\nu\,t_j) + \sigma\,\varepsilon_j, \qquad
 #   t_j = \tfrac{j}{29},\quad j = 0 \dots 29, \qquad
 #   \nu \sim U(1, 5)\ \text{cycles} .$$
 #
-# The network sees the 30 noisy samples $d$ and must return $\nu$. (We give it
+# The network sees the 30 noisy samples $d$ and must return $\nu$. We give it
 # the rescaled target $(\nu-1)/4 \in [0,1]$, because networks work best when
-# their inputs and outputs are $O(1)$ — this is the same z-scoring we will do
-# in every later part.) Note the frequencies stay well below the Nyquist limit
-# of 15 cycles for this grid, so nothing here is ambiguous in principle: a
-# perfect estimator would do well.
-#
-# This is a chirp with the chirp switched off — the Part 4 problem, one part
-# early.
+# their inputs and outputs are $O(1)$. This is called z-scoring or normalization.
+
+TODO: At the top of the tutorial, we should point to the most common pytorch docs that can help with questions like "what is .detach()", etc.
+Also, after the notebook is done, go through the notebook with the perspective of a student with zero torch knowledge and come up with 5-10 FAQ, and answer them. Very short, very concisely, We can put this at the beginning (or end? decide where better, but if at the end, we should point to it early on)
 
 # %%
 N_GRID, NU_LO, NU_HI = 30, 1.0, 5.0
@@ -482,10 +503,7 @@ fig.tight_layout()
 # %% [markdown]
 # **Reading the scatter.** Train and validation points lie on the same
 # diagonal, so the network learned something about *frequency* rather than
-# about these particular 300 examples. The spread grows toward high $\nu$:
-# with only 30 samples per example a fast oscillation is measured from fewer
-# points per cycle, so it is intrinsically harder — a property of the problem,
-# not a defect of the fit.
+# about these particular 300 examples. 
 #
 # **A surprise worth pausing on.** Look at the loss curves. The training loss
 # collapses by ten orders of magnitude — the network has memorized its 300
@@ -497,15 +515,12 @@ fig.tight_layout()
 # nothing on new data. Whether a network overfits is a property of the
 # *problem* as much as of the network — which is precisely why you always watch
 # a held-out set rather than reasoning about it in advance.
-#
-# **And what you did not get.** One number per example, with no indication of
-# how sure the network is. Near the middle of the range with clean data that
-# may be fine; at the edges, or at higher noise, the honest answer is a
-# *distribution* over $\nu$. Producing one is what Part 2 is about.
+TODO: This is an annoying and boring point, just going to confuse people. The question is whether early stopping hits at any useful point?
+As long as early stopping works here reasonably well, all is fine.  We just should say that uncertainties should be estimated based on validation or better test data, not on training data itself.
 #
 # **Exercise 1c.**
 # 1. **Noise.** Raise `sigma` to 0.8 and retrain. Does the scatter widen
-#    uniformly, or worse at some frequencies than others?
+#    uniformly, or worse at some frequencies than others
 # 2. **Data.** Drop the training set to 50 examples. Does a validation *turn*
 #    finally appear, or does the scatter just widen?
 # 3. **A nuisance parameter.** Rebuild with `random_phase=True`. Now the same
