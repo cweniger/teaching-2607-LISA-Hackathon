@@ -18,16 +18,11 @@
 # on); the GPU does the flow training and density evaluation, the CPU the
 # waveforms.
 #
-# **One honest caveat.** More training is *not* better here. With `N_STEPS`
-# doubled, the flows sharpen, the importance weights degenerate (readout ESS
-# falls by an order of magnitude) and the widths get *worse* round over round —
-# there is no validation set or early stopping in this stripped version to
-# catch that.
-#
-# With the orbit and normalisation set as below, the posteriors track the
-# production pipeline on the same source: at round 1, sd(log10 D_L) 0.186 vs
-# 0.191 and sd(cos iota) 0.511 vs 0.540; sd(log10 Mc) 1.0e-3 -> 6e-4 over four
-# rounds, against 1.0e-3 -> 7e-4.
+# Four rounds take ~1 min on a T4. The posteriors track the production run on
+# the same source: sd(log10 D_L) 0.198 vs 0.191 at round 1, sd(cos iota) 0.579
+# vs 0.540, sd(log10 Mc) 7e-4 -> 4e-4 over four rounds against 1.0e-3 -> 7e-4.
+# The blue overlay in section 5 is that production posterior, shipped with the
+# repo so you can see the gap without installing anything.
 
 # %%
 import importlib.util
@@ -336,10 +331,12 @@ def fit_pca(z9s):
 # %%
 N_ROUNDS = 4          # <-- the knob for Exercise 2
 GAMMA = 0.3           # collection temperature (production value)
-N_BUF, N_KEEP = 8000, 2000        # buffer, and fresh sims per round (25%)
+N_BUF, N_KEEP = 8000, 2000        # train buffer, and fresh sims per round (25%)
+N_VAL, N_KEEP_VAL = 1000, 250     # held-out val buffer, same 25% turnover
 N_PCA, N_POOL = 1024, 8192        # PCA fit batch, weighted-pool size
-N_STEPS_FIRST = 6000              # training steps per net, round 1
-N_STEPS = 3000                    # ... and every round after (warm-started)
+N_STEPS_MAX = 12000               # training steps per net per round (a CAP:
+EVAL_EVERY, PATIENCE = 250, 6     # early stopping on the val loss usually
+                                  # stops well before it)
 
 LO_T = torch.tensor(PRIOR_LO, dtype=torch.float32, device=dev)
 HI_T = torch.tensor(PRIOR_HI, dtype=torch.float32, device=dev)
@@ -347,7 +344,15 @@ HI_T = torch.tensor(PRIOR_HI, dtype=torch.float32, device=dev)
 t0 = time.time()
 buf_theta = PRIOR_LO + (PRIOR_HI - PRIOR_LO) * rng.uniform(size=(N_BUF, D))
 buf_x = sim_batch(buf_theta)
-print(f'initial buffer: {N_BUF} live sims in {time.time() - t0:.0f} s')
+# A SEPARATE validation buffer, never trained on, refreshed at the same rate as
+# the train buffer so the two always describe the same distribution. Without it
+# there is nothing to early-stop on, and the flows quietly overfit: more
+# training then makes the posterior WORSE, which is impossible to notice from
+# the training loss alone.
+val_theta = PRIOR_LO + (PRIOR_HI - PRIOR_LO) * rng.uniform(size=(N_VAL, D))
+val_x = sim_batch(val_theta)
+print(f'initial buffers: {N_BUF} train + {N_VAL} val live sims '
+      f'in {time.time() - t0:.0f} s')
 
 # The networks are created ONCE and keep learning across rounds (warm start).
 # Training from scratch each round throws away everything the previous round
@@ -365,20 +370,61 @@ for rnd in range(1, N_ROUNDS + 1):
     idx = rng.choice(len(buf_theta), N_PCA, replace=False)
     mu, V, eigs = fit_pca(buf_theta[idx])
     spectra.append(eigs[:200].copy())
-    s_t = torch.from_numpy(((buf_x - mu) @ V.T).astype(np.float32)).to(dev)
-    th_t = torch.from_numpy(buf_theta.astype(np.float32)).to(dev)
-    smu, ssd = s_t.mean(0), s_t.std(0) + 1e-6
-    w1, sc = to_lat(th_t, LO_T, HI_T), zscore(s_t, smu, ssd)
-    so = zscore(torch.from_numpy(((x_obs - mu) @ V.T).astype(np.float32)
-                                 ).to(dev)[None], smu, ssd)
+    # WIENER weighting, not a z-score. Each PCA coefficient carries signal
+    # variance eigs^2 and (because the basis rows are orthonormal) noise
+    # variance 1, so the MMSE weight is
+    #     lam/(lam + sigma^2)/sqrt(lam)  with lam = eigs^2, sigma^2 = 1
+    #   = eigs/(eigs^2 + 1)
+    # For eigs >> 1 this normalises an informative component to unit signal
+    # variance; for eigs << 1 it SUPPRESSES it. A z-score would instead inflate
+    # every noise-dominated component back to unit variance and hand the
+    # network ~50 channels of pure noise.
+    wien = (eigs[:K] / (eigs[:K] ** 2 + 1.0)).astype(np.float32)
 
-    # -- 2. keep training the SAME two networks (warm start)
-    n_steps = N_STEPS_FIRST if rnd == 1 else N_STEPS
-    for net, opt, cond in [(qc, opt_c, sc), (qm, opt_m, torch.zeros_like(sc))]:
-        for step in range(n_steps):
+    def summarize(x):                       # (..., 2*N_T) -> (..., K)
+        return ((x - mu) @ V.T) * wien
+
+    s_t = torch.from_numpy(summarize(buf_x).astype(np.float32)).to(dev)
+    s_v = torch.from_numpy(summarize(val_x).astype(np.float32)).to(dev)
+    th_t = torch.from_numpy(buf_theta.astype(np.float32)).to(dev)
+    th_v = torch.from_numpy(val_theta.astype(np.float32)).to(dev)
+    w1, sc = to_lat(th_t, LO_T, HI_T), s_t
+    w1v, scv = to_lat(th_v, LO_T, HI_T), s_v
+    so = torch.from_numpy(summarize(x_obs[None]).astype(np.float32)).to(dev)
+
+    # -- 2. keep training the SAME two networks (warm start), early-stopping on
+    #       the held-out val buffer. The val loss uses a FIXED (t, w0) draw so
+    #       it is deterministic given the network -- otherwise its own Monte
+    #       Carlo noise swamps the improvement we are trying to detect.
+    gv = torch.Generator().manual_seed(1234)
+    t_val = torch.rand(len(w1v), 1, generator=gv).to(dev)
+    w0_val = torch.randn(len(w1v), D, generator=gv).to(dev)
+    wt_val = (1 - t_val) * w0_val + t_val * w1v
+    tgt_val = w1v - w0_val
+
+    def val_loss(net, condv):
+        with torch.no_grad():
+            return float(((net(wt_val, t_val, condv) - tgt_val) ** 2).mean())
+
+    used = []
+    for net, opt, cond, condv in [(qc, opt_c, sc, scv),
+                                  (qm, opt_m, torch.zeros_like(sc),
+                                   torch.zeros_like(scv))]:
+        best, bad, step = float('inf'), 0, 0
+        while step < N_STEPS_MAX:
+            step += 1
             i = torch.randint(0, len(w1), (256,), device=dev)
             loss = fm_loss(net, w1[i], cond[i])
             opt.zero_grad(); loss.backward(); opt.step()
+            if step % EVAL_EVERY == 0:
+                v = val_loss(net, condv)
+                if v < best - 1e-4:
+                    best, bad = v, 0
+                else:
+                    bad += 1
+                    if bad >= PATIENCE:
+                        break
+        used.append(step)
 
     # -- 3. ONE mixture pool, log-weights at any temperature.
     #    THREE components: q_c, q_m, and the prior itself.  The prior draws are
@@ -406,10 +452,17 @@ for rnd in range(1, N_ROUNDS + 1):
     lw_c = logw_at(GAMMA)
     ess = float(torch.exp(2 * torch.logsumexp(lw_c, 0) - torch.logsumexp(2 * lw_c, 0)))
     gum = -torch.log(-torch.log(torch.rand_like(lw_c)))
-    keep = torch.topk(lw_c + gum, N_KEEP).indices
+    keep = torch.topk(lw_c + gum, N_KEEP + N_KEEP_VAL).indices
     new_theta = th_p[keep].cpu().numpy().astype(np.float64)
-    buf_theta = np.concatenate([new_theta, buf_theta])[:N_BUF]
-    buf_x = np.concatenate([sim_batch(new_theta), buf_x])[:N_BUF]
+    new_x = sim_batch(new_theta)
+    # split the fresh draws RANDOMLY between the two buffers: topk returns them
+    # weight-sorted, so slicing head/tail would bias one buffer
+    perm = rng.permutation(len(new_theta))
+    iv, itr = perm[:N_KEEP_VAL], perm[N_KEEP_VAL:]
+    buf_theta = np.concatenate([new_theta[itr], buf_theta])[:N_BUF]
+    buf_x = np.concatenate([new_x[itr], buf_x])[:N_BUF]
+    val_theta = np.concatenate([new_theta[iv], val_theta])[:N_VAL]
+    val_x = np.concatenate([new_x[iv], val_x])[:N_VAL]
 
     # 3b. posterior readout at gamma=1 (resample the SAME pool with replacement)
     lw_p = logw_at(1.0)
@@ -418,8 +471,9 @@ for rnd in range(1, N_ROUNDS + 1):
     sel = torch.multinomial(w_p, 4000, replacement=True)
     posts.append(th_p[sel].cpu().numpy())
 
-    print(f'round {rnd} [{time.time() - t_r:4.0f} s]: '
-          f'collect ESS {ess:5.0f}/{N_POOL}, readout ESS {ess_p:5.0f}/{N_POOL}, '
+    print(f'round {rnd} [{time.time() - t_r:4.0f} s]: steps {used[0]}/{used[1]} '
+          f'(early-stopped), collect ESS {ess:5.0f}/{N_POOL}, '
+          f'readout ESS {ess_p:5.0f}/{N_POOL}, '
           f'PCA comps > noise {(eigs > 1).sum():3d}, '
           f'sd(log10_Mc) {posts[-1][:, 2].std():.1e}, '
           f'sd(log10_DL) {posts[-1][:, 0].std():.3f}')
@@ -429,10 +483,10 @@ print(f'total {time.time() - t0:.0f} s')
 # ## 5. What happened
 
 # %%
-def corner(samples, labels, truth, names, figsize=13):
+def corner(samples, labels, truth, names, figsize=13, colors=None):
     n = samples[0].shape[1]
     fig, ax = plt.subplots(n, n, figsize=(figsize, figsize))
-    cols = plt.cm.viridis(np.linspace(0, .85, len(samples)))
+    cols = colors or plt.cm.viridis(np.linspace(0, .85, len(samples)))
     for i in range(n):
         for j in range(n):
             a = ax[i, j]
@@ -462,8 +516,24 @@ def corner(samples, labels, truth, names, figsize=13):
     return fig
 
 
+# Overlay: the production pipeline on the SAME source and prior -- 60 rounds,
+# ~750k live simulations, ~1.6 h on an L4, with all the machinery listed at the
+# bottom of this notebook. Shipped as a 5000-sample file so you can see how far
+# four bare-bones rounds get without installing anything.
+try:
+    prod = np.load('production_posterior.npy')
+except FileNotFoundError:      # colab: fetch from the repo
+    import urllib.request
+    urllib.request.urlretrieve(
+        'https://raw.githubusercontent.com/cweniger/'
+        'teaching-2607-LISA-Hackathon/main/production_posterior.npy',
+        'production_posterior.npy')
+    prod = np.load('production_posterior.npy')
+
 show = [0, len(posts) - 1] if len(posts) > 1 else [0]
-corner([posts[i] for i in show], [f'round {i + 1}' for i in show], Z_TRUE, NAMES)
+corner([posts[i] for i in show] + [prod],
+       [f'round {i + 1}' for i in show] + ['production, 60 rounds'],
+       Z_TRUE, NAMES, colors=['#E69F00', '#D55E00', '#0072B2'][-(len(show) + 1):])
 
 fig, ax = plt.subplots(1, 2, figsize=(11, 4))
 cols = plt.cm.viridis(np.linspace(0, .85, len(posts)))
@@ -513,6 +583,12 @@ for r, w in enumerate(widths, 1):
 # 3. Replace the $\gamma=1$ readout with `fm_sample(qc, so.expand(4000, K), D)`
 #    and compare widths at round 1 versus round 4. You should reproduce the
 #    over-sharpening described in section 4.
+# 4. Replace the Wiener weight with a plain z-score
+#    (`wien = 1/(s_t.std(0) + 1e-6)`) and watch what feeding the network ~50
+#    channels of pure noise does to $\cos\iota$.
+# 5. Set `PATIENCE = 1000` to disable early stopping. Training runs to the
+#    `N_STEPS_MAX` cap, the flows overfit, and the widths get *worse* round over
+#    round — the failure the validation buffer exists to catch.
 #
 # **Exercise 3** *(discussion)*. Watch the readout ESS fall as the target
 # sharpens — by round 4 it is already an order of magnitude below round 1. In
@@ -523,6 +599,48 @@ for r, w in enumerate(widths, 1):
 # draws in that pool get a log-density ~40 nats below the rest. What you ran
 # here is the same algorithm with the safety rails removed — fine for four
 # rounds, not fine for fifty.
+#
+# ---
+#
+# ## 6. What a production pipeline needs on top
+#
+# *(work in progress — more soon)*
+#
+# The blue overlay above is the same algorithm run for 60 rounds and ~750k live
+# simulations. Everything between it and what you just ran is **robustness, not
+# ideas**: none of it changes the answer at four rounds, and all of it exists
+# because something broke without it. The honest list:
+#
+# **Summaries**
+# - *Procrustes alignment* of consecutive PCA bases, so a warm-started network
+#   does not see its input frame rotate underneath it every round. (Wiener
+#   weighting and the held-out validation buffer used to be on this list — both
+#   are now implemented above, because they are cheap and change the answer.)
+#
+# **Training**
+# - *EMA* over the weights, and keeping the best network rather than the latest —
+#   a single diverged network otherwise poisons the buffer for every later round.
+#   In one production run a network blew up to `nll = 1.7e19`, was accepted as
+#   "best", and destroyed the readout.
+#
+# **The readout**
+# - *Pareto-smoothed importance sampling* with the $\hat k$ diagnostic. Raw
+#   self-normalised IS silently collapsed to ESS = 1 out of 100000 in production
+#   runs; PSIS recovers ~27000 and $\hat k > 0.7$ tells you when not to trust it.
+# - Enough *ODE steps* in the density: 32 steps was under-resolved and inflated
+#   the reported ESS by an order of magnitude.
+#
+# **The loop**
+# - *Adaptive buffer growth* (double when the validation NLL stalls) and a
+#   principled *stopping rule*, instead of a fixed `N_ROUNDS`.
+# - An occasional *exact-likelihood probe* — the one diagnostic the flows cannot
+#   flatter, because the simulator does not know what the proposal is.
+#
+# **And the part that is not machinery at all:** getting the simulator right.
+# The single largest error found while building this notebook was not in the
+# inference — it was forgetting to tell lisabeta where LISA is in its orbit,
+# which scrambled the polarisation content and silently distorted the
+# distance–inclination posterior by 6x.
 #
 # ---
 # *Scope: this starts from the MCMC-narrowed prior box and demonstrates the zoom
