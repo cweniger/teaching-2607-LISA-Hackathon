@@ -4,6 +4,7 @@
 Reveal.initialize({
   hash: true, center: false, transition: 'none', slideNumber: true,
   width: 1214, height: 700, margin: 0.04, minScale: 0.2, maxScale: 2.0,
+  mathjax3: { mathjax: 'vendor/mathjax/tex-mml-chtml.js' },
   plugins: [ RevealMath.MathJax3 ]
 });
 
