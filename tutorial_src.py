@@ -547,8 +547,18 @@ print("""
 # # Part 2 — Modeling distributions with flow matching  *(~25 min)*
 #
 # Part 1 fitted a *function*: one number $y$ for each input $x$. Now we fit a
-# **distribution**. We are handed samples from some unknown density $q(w)$ and
-# want a machine that reproduces it.
+# **distribution**.
+#
+# From here on $\theta$ denotes the quantity whose distribution we care about
+# — in Parts 3 to 5 it will be the physical parameters we want to infer. We are
+# handed samples from an unknown target density and want a model that
+# reproduces it:
+#
+# $$q_\phi(\theta) \;\approx\; p(\theta),$$
+#
+# where $p(\theta)$ is the **target** we only ever see samples from, and
+# $q_\phi(\theta)$ is our **model**, with $\phi$ the learnable network
+# parameters — the same $\phi$ that gradient descent moved in Part 1.
 #
 # ## Why this is the central problem — and why it is hard
 #
@@ -559,53 +569,62 @@ print("""
 # among many, it is the core capability. Everything after this cell is an
 # application of it.
 #
-# But a probability density is a much more constrained object than the
-# function of Part 1. We need a $q(w)$ that is
+# The obvious move would be to do what we did in Part 1: let an MLP output
+# $q_\phi(\theta)$ directly. It does not work, because a density is a far more
+# constrained object than a function. We need a $q_\phi(\theta)$ that is
 #
-# - **non-negative** everywhere, $q(w) \ge 0$;
-# - **normalized**, $\int q(w)\,\mathrm d w = 1$;
+# - **non-negative** everywhere, $q_\phi(\theta) \ge 0$;
+# - **normalized**, $\int q_\phi(\theta)\,\mathrm d\theta = 1$;
 # - typically **smooth**, since the physics behind it usually is.
 #
 # and, crucially, we need *two operations* on it:
 #
-# - **evaluate**: given $w$, return $q(w)$ (for likelihoods, weights, model
-#   comparison);
-# - **sample**: produce fresh draws $w \sim q$ (for error bars, corner plots,
-#   propagating uncertainty).
+# - **evaluate**: given $\theta$, return $q_\phi(\theta)$ (for likelihoods,
+#   weights, model comparison);
+# - **sample**: produce fresh draws $\theta \sim q_\phi$ (for error bars,
+#   corner plots, propagating uncertainty).
 #
 # Ideally both are **fast**, because we will call them millions of times.
 #
-# Normalization is what makes this awkward: it is a *global* constraint, so you
-# cannot just take an MLP, declare its output to be a density, and train it —
-# changing the network anywhere changes the integral everywhere. The classical
-# escapes each give up something. A Gaussian satisfies everything and is
-# trivially fast, but can represent almost nothing. An unnormalized
-# energy-based model $q \propto e^{-E_\phi(w)}$ is arbitrarily flexible, but
-# you no longer know the normalization and sampling needs MCMC — slow, and it
-# has to be re-run for every new problem. Normalizing flows give you both
-# operations exactly, but only by restricting the architecture to invertible
-# layers with tractable Jacobians.
+# Non-negativity is easy — exponentiate. Normalization is the hard one: it is a
+# *global* constraint, so you cannot simply declare an MLP's output to be a
+# density and train it, since changing the network anywhere changes the
+# integral everywhere. The classical escapes each give something up. A Gaussian
+# satisfies everything and is trivially fast, but can represent almost nothing.
+# An unnormalized energy-based model $q_\phi \propto e^{-E_\phi(\theta)}$ is
+# arbitrarily flexible, but you no longer know the normalization and sampling
+# needs MCMC — slow, and re-run from scratch for every new problem. Normalizing
+# flows give you both operations exactly, but only by restricting the
+# architecture to invertible layers with tractable Jacobians.
 #
-# **Flow matching** is the current answer: unrestricted network, exact
-# sampling, computable density, and a training objective that is plain
-# regression. The idea is to build the sampler out of a **flow** — start from
-# an easy distribution (a unit Gaussian) and move the points continuously
-# until they are distributed like $q$. The motion is described by a **velocity
-# field** $v_\phi(w, t)$, an MLP exactly like Part 1's taking a position $w$
-# and a time $t \in [0,1]$, and "training the generative model" means fitting
-# that velocity field. The price: sampling costs an ODE solve rather than a
-# single forward pass.
+# ## Flow matching
 #
-# ## The mechanics, in three equations
+# Flow matching is the current answer: an unrestricted network, exact sampling,
+# a computable density, and a training objective that is plain regression.
+#
+# The idea is to build the sampler out of a **flow**. Start from an easy
+# distribution (a unit Gaussian) and move the points continuously until they
+# are distributed like $p$. The motion is described by a **velocity field**
+# $v_\phi(\theta, t)$ — an MLP exactly like Part 1's, taking a position
+# $\theta$ and a time $t \in [0,1]$ — and "training the generative model" means
+# fitting that velocity field. The price is that sampling costs an ODE solve
+# rather than a single forward pass.
+#
+# ### The mechanics, in three equations
+#
+# Write $\theta_0$ for a point drawn from the Gaussian at $t = 0$ and
+# $\theta_1$ for a data point at $t = 1$.
 #
 # **1. Training.** Pick a random time $t$, a random noise point
-# $w_0 \sim \mathcal N(0, I)$ and a random data sample $w_1 \sim q$. Place
-# yourself on the straight line between the two at time $t$, and regress the
-# velocity onto the direction that points from $w_0$ to $w_1$:
+# $\theta_0 \sim \mathcal N(0, I)$ and a random data sample
+# $\theta_1 \sim p$. Place yourself on the straight line between the two at
+# time $t$, and regress the velocity onto the direction from $\theta_0$ to
+# $\theta_1$:
 #
-# $$\mathcal L(\phi) = \mathbb E_{t,\, w_0,\, w_1}
-#   \Big[\;\big\| \, v_\phi\big(\underbrace{(1-t)\,w_0 + t\,w_1}_{\textstyle w_t},
-#   \; t\big) \; - \; (w_1 - w_0) \, \big\|^2 \;\Big],
+# $$\mathcal L(\phi) = \mathbb E_{t,\, \theta_0,\, \theta_1}
+#   \Big[\;\big\| \, v_\phi\big(
+#   \underbrace{(1-t)\,\theta_0 + t\,\theta_1}_{\textstyle \theta_t},
+#   \; t\big) \; - \; (\theta_1 - \theta_0) \, \big\|^2 \;\Big],
 #   \qquad t \sim U(0,1).$$
 #
 # Note what is *absent*: no integration, no sampling from the model, no
@@ -615,21 +634,23 @@ print("""
 # **2. Sampling.** Draw a noise point and integrate the learned velocity field
 # from $t = 0$ to $t = 1$:
 #
-# $$w(0) = w_0 \sim \mathcal N(0, I), \qquad
-#   \frac{\mathrm d w}{\mathrm d t} = v_\phi\big(w(t),\, t\big), \qquad
-#   w(1) \sim q_\phi \;\approx\; q .$$
+# $$\theta(0) = \theta_0 \sim \mathcal N(0, I), \qquad
+#   \frac{\mathrm d \theta}{\mathrm d t} = v_\phi\big(\theta(t),\, t\big),
+#   \qquad \theta(1) \sim q_\phi \;\approx\; p .$$
 #
-# We integrate with plain Euler steps, $w \mathrel{+}= v_\phi(w,t)\,\Delta t$.
+# We integrate with plain Euler steps,
+# $\theta \mathrel{+}= v_\phi(\theta,t)\,\Delta t$.
 #
 # **3. Evaluation.** If you also need the *density* of a point (we will, in
-# Part 4), integrate the same ODE **backwards** from $w_1$ while accumulating
-# the divergence of the velocity field:
+# Part 4), integrate the same ODE **backwards** from $\theta_1$ while
+# accumulating the divergence of the velocity field:
 #
-# $$\log q_\phi(w_1) = \log \mathcal N\big(w(0);\, 0, I\big)
-#   \; - \; \int_0^1 \nabla \!\cdot\! v_\phi\big(w(t),\, t\big)\, \mathrm d t .$$
+# $$\log q_\phi(\theta_1) = \log \mathcal N\big(\theta(0);\, 0, I\big)
+#   \; - \; \int_0^1 \nabla \!\cdot\! v_\phi\big(\theta(t),\, t\big)\,
+#   \mathrm d t .$$
 #
 # *Why* regressing onto straight lines between unrelated random pairs produces
-# a velocity field whose flow transports $\mathcal N(0,I)$ to $q$ is genuinely
+# a velocity field whose flow transports $\mathcal N(0,I)$ to $p$ is genuinely
 # non-obvious, and we will not derive it here — see Lipman et al.
 # (arXiv:2210.02747), Liu et al. (arXiv:2209.03003) and Albergo &
 # Vanden-Eijnden (arXiv:2209.15571). For our purposes it is a black box with
@@ -649,10 +670,10 @@ print("""
 # %%
 def target_banana(n):
     """n samples of a curved 'banana' density -> (n, 2)."""
-    w1 = 6 * torch.rand(n, device=dev) - 3                  # spread along the arc
-    w2 = 0.3 * torch.rand(n, device=dev).mul(2).sub(1) \
-        + 0.3 * w1 ** 2 - 1.2                               # bend it
-    return torch.stack([w1, w2 + 0.15 * torch.randn(n, device=dev)], 1)
+    t1 = 6 * torch.rand(n, device=dev) - 3                  # spread along the arc
+    t2 = 0.3 * torch.rand(n, device=dev).mul(2).sub(1) \
+        + 0.3 * t1 ** 2 - 1.2                               # bend it
+    return torch.stack([t1, t2 + 0.15 * torch.randn(n, device=dev)], 1)
 
 
 def target_spiral(n):
@@ -663,80 +684,83 @@ def target_spiral(n):
     return c + 0.12 * torch.randn(n, 2, device=dev)       # thicken the arm
 
 
-w_banana = target_banana(20000)
-w_spiral = target_spiral(20000)
+th_banana = target_banana(20000)
+th_spiral = target_spiral(20000)
 
 fig, ax = plt.subplots(1, 2, figsize=(9.2, 4.2))
-for a, w, ttl in [(ax[0], w_banana, 'target: banana'),
-                  (ax[1], w_spiral, 'target: spiral')]:
-    a.plot(w[:4000, 0].cpu(), w[:4000, 1].cpu(), 'k.', ms=1, alpha=.3)
-    a.set(title=ttl, xlabel=r'$w_1$', ylabel=r'$w_2$', aspect='equal')
+for a, th, ttl in [(ax[0], th_banana, 'target: banana'),
+                   (ax[1], th_spiral, 'target: spiral')]:
+    a.plot(th[:4000, 0].cpu(), th[:4000, 1].cpu(), 'k.', ms=1, alpha=.3)
+    a.set(title=ttl, xlabel=r'$\theta_1$', ylabel=r'$\theta_2$', aspect='equal')
 fig.tight_layout()
 
 # %% [markdown]
 # ## The implementation
 #
-# Three short functions, and they are the ones that will still be running in
-# Part 5 on real LISA data. `cond` is the conditioning input; leave it `None`
-# for now (we use it in the second half of this part).
+# Four short functions. They are used unchanged for the rest of the notebook,
+# including the LISA example in Part 5. `cond` is the conditioning input; leave
+# it `None` for now (we use it in the second half of this part).
 
 # %%
 # Generic MLP helper for the rest of the notebook: same idea as Part 1's MLP
 # class, but with configurable input/output dimensions and depth.
 def mlp(d_in, d_out, hidden, layers):
-    mods, d = [], d_in
-    for _ in range(layers):
-        mods += [nn.Linear(d, hidden), nn.ReLU()]
-        d = hidden
-    return nn.Sequential(*mods, nn.Linear(d, d_out))
+    mods, d = [], d_in                              # mods: the layer list so far
+    for _ in range(layers):                         # one hidden block per layer
+        mods += [nn.Linear(d, hidden), nn.ReLU()]   # affine map, then ReLU
+        d = hidden                                  # next block takes `hidden` in
+    return nn.Sequential(*mods, nn.Linear(d, d_out))  # read-out, no nonlinearity
 
 
-def fm_loss(net, w1, cond=None):
-    """Equation 1. This exact function is reused in Parts 3, 4 and 5."""
-    w0 = torch.randn_like(w1)                       # noise point
-    t = torch.rand(len(w1), 1, device=w1.device)    # random time
-    wt = (1 - t) * w0 + t * w1                      # point on the straight line
-    v = net(wt, t, cond)                            # predicted velocity there
-    return ((v - (w1 - w0)) ** 2).mean()            # regress onto w1 - w0
+def fm_loss(net, th1, cond=None):
+    """Equation 1: the flow-matching objective. Reused in Parts 3, 4 and 5."""
+    th0 = torch.randn_like(th1)                     # theta_0 ~ N(0, I): noise point
+    t = torch.rand(len(th1), 1, device=th1.device)  # t ~ U(0, 1), one per example
+    tht = (1 - t) * th0 + t * th1                   # theta_t on the straight line
+    v = net(tht, t, cond)                           # velocity the network predicts
+    return ((v - (th1 - th0)) ** 2).mean()          # regress it onto theta_1 - theta_0
 
 
 class VelocityNet(nn.Module):
-    """Velocity field v(w, t | cond): an MLP with a Fourier embedding of t."""
+    """Velocity field v(theta, t | cond): an MLP with a Fourier embedding of t."""
 
-    def __init__(self, d_w, d_cond=0, hidden=128, layers=3):
+    def __init__(self, d_theta, d_cond=0, hidden=128, layers=3):
         super().__init__()
-        self.freqs = torch.tensor([1., 2., 4., 8.])
-        self.net = mlp(d_w + 9 + d_cond, d_w, hidden, layers)   # 9 = 1 + 4 + 4
+        self.freqs = torch.tensor([1., 2., 4., 8.])          # time-embedding freqs
+        # inputs: theta (d_theta) + time embedding (9) + conditioning (d_cond)
+        self.net = mlp(d_theta + 9 + d_cond, d_theta, hidden, layers)
 
-    def forward(self, w, t, cond=None):
-        ft = 2 * np.pi * t * self.freqs.to(t.device)
-        temb = torch.cat([t, ft.sin(), ft.cos()], 1)   # t, sin(2 pi f t), cos(...)
-        parts = [w, temb] if cond is None else [w, temb, cond]
-        return self.net(torch.cat(parts, 1))
+    def forward(self, th, t, cond=None):
+        ft = 2 * np.pi * t * self.freqs.to(t.device)         # (n, 4) scaled times
+        temb = torch.cat([t, ft.sin(), ft.cos()], 1)         # (n, 9): t and 4 sin/cos
+        # a raw scalar t is hard for an MLP to resolve finely; sin/cos of several
+        # frequencies gives it a basis in which sharp t-dependence is easy
+        parts = [th, temb] if cond is None else [th, temb, cond]
+        return self.net(torch.cat(parts, 1))                 # -> (n, d_theta)
 
 
-@torch.no_grad()
-def fm_sample(net, cond, d_w, steps=64, n=None, return_path=False):
-    """Equation 2: Euler-integrate dw/dt = v from t=0 (noise) to t=1 (samples)."""
-    n = len(cond) if cond is not None else n
+@torch.no_grad()                                    # sampling never needs gradients
+def fm_sample(net, cond, d_theta, steps=64, n=None, return_path=False):
+    """Equation 2: Euler-integrate dtheta/dt = v from t=0 (noise) to t=1."""
+    n = len(cond) if cond is not None else n        # one sample per conditioning row
     device = cond.device if cond is not None else next(net.parameters()).device
-    w = torch.randn(n, d_w, device=device)             # w(0) ~ N(0, I)
-    path = [w.clone()]
+    th = torch.randn(n, d_theta, device=device)     # theta(0) ~ N(0, I)
+    path = [th.clone()]                             # keep the route, for plotting
     for i in range(steps):
-        t = torch.full((n, 1), (i + 0.5) / steps, device=device)
-        w = w + net(w, t, cond) / steps                # w += v * dt
-        path.append(w.clone())
-    return (w, torch.stack(path)) if return_path else w
+        t = torch.full((n, 1), (i + 0.5) / steps, device=device)  # midpoint time
+        th = th + net(th, t, cond) / steps          # Euler step: theta += v * dt
+        path.append(th.clone())
+    return (th, torch.stack(path)) if return_path else th        # theta(1) ~ q_phi
 
 # %%
-def train_fm(net, w1, cond=None, steps=3000, batch=512, lr=1e-3, log=True):
+def train_fm(net, th1, cond=None, steps=3000, batch=512, lr=1e-3, log=True):
     """Minimize fm_loss by Adam -- the same loop as Part 1's fit()."""
-    opt = torch.optim.Adam(net.parameters(), lr=lr)
+    opt = torch.optim.Adam(net.parameters(), lr=lr)      # holds pointers to phi
     t0 = time.time()
     for step in range(steps):
-        i = torch.randint(0, len(w1), (batch,), device=w1.device)
-        loss = fm_loss(net, w1[i], None if cond is None else cond[i])
-        opt.zero_grad(); loss.backward(); opt.step()
+        i = torch.randint(0, len(th1), (batch,), device=th1.device)  # minibatch
+        loss = fm_loss(net, th1[i], None if cond is None else cond[i])  # forward
+        opt.zero_grad(); loss.backward(); opt.step()     # zero, backward, step
         if log and (step + 1) % 1000 == 0:
             print(f'  step {step + 1}/{steps}  loss {loss.item():.3f}  '
                   f'[{time.time() - t0:.0f}s]')
@@ -747,24 +771,24 @@ def train_fm(net, w1, cond=None, steps=3000, batch=512, lr=1e-3, log=True):
 
 # %%
 snet = VelocityNet(2).to(dev)                       # d_cond = 0: unconditional
-train_fm(snet, w_spiral)
+train_fm(snet, th_spiral)
 
 samp, path = fm_sample(snet, None, 2, n=4000, return_path=True)
 
 fig, ax = plt.subplots(1, 2, figsize=(9.6, 4.4))
 # (a) target vs model samples
-ax[0].plot(w_spiral[:4000, 0].cpu(), w_spiral[:4000, 1].cpu(), 'k.', ms=1,
+ax[0].plot(th_spiral[:4000, 0].cpu(), th_spiral[:4000, 1].cpu(), 'k.', ms=1,
            alpha=.15, label='target')
 ax[0].plot(samp[:, 0].cpu(), samp[:, 1].cpu(), 'C0.', ms=1, alpha=.3,
            label='flow-matching samples')
-ax[0].set(title='the model learned the spiral', xlabel=r'$w_1$', ylabel=r'$w_2$')
+ax[0].set(title='the model learned the spiral', xlabel=r'$\theta_1$', ylabel=r'$\theta_2$')
 ax[0].legend(markerscale=8, fontsize=8); ax[0].set_aspect('equal')
 # (b) where each sample came from, and the route it took
 p = path[:, :60].cpu()
 ax[1].plot(p[:, :, 0], p[:, :, 1], ':', color='gray', lw=.7)
-ax[1].plot(p[0, :, 0], p[0, :, 1], 'C2o', ms=4, label=r'base sample $w(0)$')
-ax[1].plot(p[-1, :, 0], p[-1, :, 1], 'C0o', ms=4, label=r'final sample $w(1)$')
-ax[1].set(title='60 trajectories of the learned flow', xlabel=r'$w_1$')
+ax[1].plot(p[0, :, 0], p[0, :, 1], 'C2o', ms=4, label=r'base sample $\theta(0)$')
+ax[1].plot(p[-1, :, 0], p[-1, :, 1], 'C0o', ms=4, label=r'final sample $\theta(1)$')
+ax[1].set(title='60 trajectories of the learned flow', xlabel=r'$\theta_1$')
 ax[1].legend(fontsize=8); ax[1].set_aspect('equal')
 fig.tight_layout()
 
@@ -774,7 +798,7 @@ fig.tight_layout()
 #   plain regression loss and 3000 Adam steps.
 # - *Right:* every final sample traces back to one Gaussian base point. Note
 #   the routes are **curved**, even though training only ever used *straight*
-#   lines between random pairs $(w_0, w_1)$ — the network learns the *average*
+#   lines between random pairs $(\theta_0, \theta_1)$ — the network learns the *average*
 #   velocity over all pairs passing through a point, and the resulting flow
 #   bends. Do not expect a trajectory to connect the pair it was trained on.
 #
@@ -797,23 +821,23 @@ def my_target(n):                                   # noqa: F811
     a = np.pi * torch.rand(n // 2, 1, device=dev)   # half circle
     top = torch.cat([a.cos(), a.sin()], 1)
     bot = torch.cat([1 - a.cos(), -a.sin() + 0.4], 1)
-    w = 1.6 * torch.cat([top, bot]) + 0.09 * torch.randn(2 * (n // 2), 2, device=dev)
-    return w[torch.randperm(len(w), device=dev)]    # shuffle: plots take w[:4000]
+    th = 1.6 * torch.cat([top, bot]) + 0.09 * torch.randn(2 * (n // 2), 2, device=dev)
+    return th[torch.randperm(len(th), device=dev)]  # shuffle: plots take th[:4000]
 
 
 # %%
 # Provided: fit a flow to whatever my_target returns, and plot both.
-w_mine = my_target(20000)
+th_mine = my_target(20000)
 mynet = VelocityNet(2).to(dev)
-train_fm(mynet, w_mine, log=False)
+train_fm(mynet, th_mine, log=False)
 samp_mine = fm_sample(mynet, None, 2, n=4000)
 
 fig, ax = plt.subplots(figsize=(4.6, 4.4))
-ax.plot(w_mine[:4000, 0].cpu(), w_mine[:4000, 1].cpu(), 'k.', ms=1, alpha=.15,
+ax.plot(th_mine[:4000, 0].cpu(), th_mine[:4000, 1].cpu(), 'k.', ms=1, alpha=.15,
         label='target')
 ax.plot(samp_mine[:, 0].cpu(), samp_mine[:, 1].cpu(), 'C0.', ms=1, alpha=.3,
         label='flow-matching samples')
-ax.set(xlabel=r'$w_1$', ylabel=r'$w_2$', title='your own distribution')
+ax.set(xlabel=r'$\theta_1$', ylabel=r'$\theta_2$', title='your own distribution')
 ax.legend(markerscale=8, fontsize=8); ax.set_aspect('equal')
 fig.tight_layout()
 
@@ -822,20 +846,20 @@ fig.tight_layout()
 #
 # One more ingredient and we are done. Very often we do not want *one*
 # distribution but a *family* of them, indexed by some input $c$ — that is a
-# **conditional** density $q(w \,|\, c)$. The change is minimal: feed $c$ to
-# the velocity field alongside $w$ and $t$,
+# **conditional** density $q(\theta \,|\, c)$. The change is minimal: feed $c$ to
+# the velocity field alongside $\theta$ and $t$,
 #
-# $$\mathcal L(\phi) = \mathbb E_{t,\, w_0,\, (w_1, c)}
-#   \Big[\;\big\| \, v_\phi\big((1-t)\,w_0 + t\,w_1,\; t \,\big|\, c\big)
-#   \; - \; (w_1 - w_0) \, \big\|^2 \;\Big],$$
+# $$\mathcal L(\phi) = \mathbb E_{t,\, \theta_0,\, (\theta_1, c)}
+#   \Big[\;\big\| \, v_\phi\big((1-t)\,\theta_0 + t\,\theta_1,
+#   \; t \,\big|\, c\big) \; - \; (\theta_1 - \theta_0) \, \big\|^2 \;\Big],$$
 #
-# where the pairs $(w_1, c)$ are drawn **jointly**: each training sample comes
+# where the pairs $(\theta_1, c)$ are drawn **jointly**: each training sample comes
 # with the $c$ it belongs to. Sampling is unchanged except that you say which
 # $c$ you want. In code, that is the `cond` argument we have been passing as
 # `None` — nothing else moves.
 #
 # Demonstration: rings of varying radius. The condition $c$ is the radius,
-# the target $q(w\,|\,c)$ is a ring of that radius.
+# the target $q(\theta\,|\,c)$ is a ring of that radius.
 
 # %%
 def target_ring(radius):
@@ -846,20 +870,20 @@ def target_ring(radius):
 
 
 c_train = 0.5 + 2.0 * torch.rand(40000, 1, device=dev)   # radii in [0.5, 2.5]
-w_ring = target_ring(c_train)
+th_ring = target_ring(c_train)
 
 rnet = VelocityNet(2, d_cond=1).to(dev)                  # <-- the only change
-train_fm(rnet, w_ring, c_train, steps=4000)
+train_fm(rnet, th_ring, c_train, steps=4000)
 
 fig, ax = plt.subplots(1, 2, figsize=(9.6, 4.6))
-ax[0].plot(w_ring[:6000, 0].cpu(), w_ring[:6000, 1].cpu(), 'k.', ms=1, alpha=.2)
-ax[0].set(title=r'training data: all radii mixed together', xlabel=r'$w_1$',
-          ylabel=r'$w_2$')
+ax[0].plot(th_ring[:6000, 0].cpu(), th_ring[:6000, 1].cpu(), 'k.', ms=1, alpha=.2)
+ax[0].set(title=r'training data: all radii mixed together', xlabel=r'$\theta_1$',
+          ylabel=r'$\theta_2$')
 for r, col in zip([0.7, 1.3, 1.9, 2.4], ['C0', 'C1', 'C2', 'C3']):
     c = torch.full((1500, 1), r, device=dev)
     s = fm_sample(rnet, c, 2).cpu()
     ax[1].plot(s[:, 0], s[:, 1], '.', color=col, ms=1.5, alpha=.5, label=f'c = {r}')
-ax[1].set(title='one network, four requested radii', xlabel=r'$w_1$')
+ax[1].set(title='one network, four requested radii', xlabel=r'$\theta_1$')
 ax[1].legend(markerscale=6, fontsize=8)
 for a in ax:
     a.set_aspect('equal'); a.set(xlim=(-3, 3), ylim=(-3, 3))
@@ -869,7 +893,7 @@ fig.tight_layout()
 # The training set (left) is a filled disc — no individual ring is visible in
 # it. Yet asking the trained network for $c = 0.7$ or $c = 2.4$ returns a
 # clean ring of exactly that radius (right). The network did not memorize four
-# rings; it learned the *whole family* $q(w\,|\,c)$ at once, which is why a
+# rings; it learned the *whole family* $q(\theta\,|\,c)$ at once, which is why a
 # radius it never saw during training works just as well. That property is
 # called **amortization**, and it is the entire reason this machinery is
 # interesting for inference.
@@ -905,7 +929,7 @@ for a, st in zip(ax[2:], [1, 4, 16]):
     a.plot(s[:, 0], s[:, 1], 'C1.', ms=1.5, alpha=.5)
     a.set(title=f'c = 1.9, steps = {st}')
 for a in ax:
-    a.set_aspect('equal'); a.set(xlim=(-4, 4), ylim=(-4, 4), xlabel=r'$w_1$')
+    a.set_aspect('equal'); a.set(xlim=(-4, 4), ylim=(-4, 4), xlabel=r'$\theta_1$')
 fig.tight_layout()
 
 # 4: late-time weighting of t. Same net size, same budget, only t changes.
@@ -919,8 +943,8 @@ def fm_loss_late(net, w1, cond=None):
 rnet_late = VelocityNet(2, d_cond=1).to(dev)
 opt = torch.optim.Adam(rnet_late.parameters(), lr=1e-3)
 for step in range(4000):
-    i = torch.randint(0, len(w_ring), (512,), device=dev)
-    loss = fm_loss_late(rnet_late, w_ring[i], c_train[i])
+    i = torch.randint(0, len(th_ring), (512,), device=dev)
+    loss = fm_loss_late(rnet_late, th_ring[i], c_train[i])
     opt.zero_grad(); loss.backward(); opt.step()
 
 fig, ax = plt.subplots(1, 3, figsize=(10, 3.5))
@@ -928,7 +952,7 @@ for a, st in zip(ax, [1, 4, 16]):
     s = fm_sample(rnet_late, torch.full((1500, 1), 1.9, device=dev), 2, steps=st).cpu()
     a.plot(s[:, 0], s[:, 1], 'C2.', ms=1.5, alpha=.5)
     a.set(title=f'late-t training, steps = {st}', aspect='equal',
-          xlim=(-4, 4), ylim=(-4, 4), xlabel=r'$w_1$')
+          xlim=(-4, 4), ylim=(-4, 4), xlabel=r'$\theta_1$')
 fig.tight_layout()
 
 # %% [markdown]
@@ -941,7 +965,8 @@ fig.tight_layout()
 # whose shape changes qualitatively with $c$ (say the number of modes)
 # extrapolation fails outright. Beyond the prior you are trusting the network,
 # not the data. (2) `steps=1` is a single Euler step, so the sample is just
-# $w_0 + v_\phi(w_0, \tfrac12)$ — one smooth displacement of the Gaussian,
+# $\theta_0 + v_\phi(\theta_0, \tfrac12)$ — one smooth displacement of the
+# Gaussian,
 # which cannot open a hole in the middle, so you get a fuzzy disc instead of a
 # ring. It sharpens fast and is essentially converged by ~16 steps. (4) With
 # $t$ pushed toward 1 the
