@@ -41,7 +41,6 @@ PyPI (~20 s on Colab) and simulates live.
 | `tutorial_lisa_sbi.ipynb` | the tutorial (open this) |
 | `lisa_sims.ipynb` | companion: pip-install lisabeta, simulate LISA data live |
 | `lisa_sequential_new.ipynb` | **companion:** the sequential zoom on the MBHB, live sims — bare bones (latent-space flows, prior in the proposal mixture, importance-weighted readout, no Procrustes/PSIS/EMA) |
-| `lisa_sequential.ipynb` | *obsolete*, superseded by `lisa_sequential_new.ipynb` |
 | `*_src.py` | notebook sources (jupytext percent format) |
 | `build_notebook.py` | `*_src.py` → `.ipynb` converter |
 | `make_tutorial_simbank.py` | regenerates `mbhb_simbank.npz` (no longer used by the tutorial) |
