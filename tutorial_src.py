@@ -737,17 +737,16 @@ fig.tight_layout()
 
 # %% [markdown]
 
-# **This is amortization.** The training data was a featureless smear in which no
-# individual spiral was visible, yet the network reproduces any member of the
-# family on request — it learned the whole map $c \mapsto p(\theta|c)$, not a
+# **This is amortization.** The training data has a finite number of labeled spirals as examples,
+# yet the network reproduces any member of the
+# family on request — it learned the whole map $c \mapsto p(\theta|c)$ from a 
 # handful of examples. That property is the entire reason this machinery is worth
 # building for inference, where $c$ will be *data* and $\theta$ the parameters we
 # want.
 #
-# It also stops working outside the training range: the extrapolated panel gets
-# the rough size wrong and the structure blurred. Amortization interpolates; it
-# does not extrapolate, and beyond the training range you are trusting the
-# network rather than the data.
+# Not that this approach generally stops working outside the training range: the extrapolated panel gets
+# the rough size wrong and the structure blurred. Amortization **interpolates**; it
+# does not extrapolate.
 
 # %% [markdown]
 
