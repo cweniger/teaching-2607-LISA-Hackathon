@@ -2,7 +2,7 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb) &nbsp;**the tutorial**
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_sequential.ipynb) &nbsp;**the sequential zoom on the MBHB**, with waveforms simulated live
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_sequential_new.ipynb) &nbsp;**the sequential zoom on the MBHB**, with waveforms simulated live
 
 **[Intro slides](https://cweniger.github.io/teaching-2607-LISA-Hackathon/)** —
 the 30-minute concept lecture given before the tutorial: the science case,
