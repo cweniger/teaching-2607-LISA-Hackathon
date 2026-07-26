@@ -1,10 +1,8 @@
 # %% [markdown]
 
-# # From MLPs to LISA: simulation-based inference, hands-on
+# # From MLPs to LISA: simulation-based inference, step-by-step
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb)
-#
-# **LISA tutorial — approximately 95 minutes.**
 #
 # | part | idea | new ingredient |
 # |---|---|---|
@@ -12,10 +10,6 @@
 # | 2 | fit a *distribution* | flow matching (FM), conditioning |
 # | 3 | fit a *posterior*: feed FM pairs from a simulator | SBI, amortization |
 # | 4 | a toy gravitational wave | data compression + **sequential** inference |
-#
-# Each part fixes the visible failure of the one before. All code is plain
-# PyTorch, and the companion notebook `lisa_sequential_new.ipynb` runs the 
-# same algorithms on real LISA data.
 #
 # > **Colab setup:** Runtime → Change runtime type → **T4 GPU**, then run all
 # > cells top to bottom. Everything also works on CPU, just slower.
@@ -47,7 +41,7 @@ print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for 
 # %% [markdown]
 
 # ---
-# # Part 1 — Neural networks  *(~30 min)*
+# # Part 1 — Neural networks
 
 # %% [markdown]
 
@@ -133,7 +127,7 @@ fig.tight_layout()
 #   outputs to roughly mean zero and unit variance; every later part of this
 #   notebook z-scores its data for this reason.
 # - **Smoothness is inherited from $g$.** ReLU gives corners, SELU gives smooth
-#   curves. Neither is more powerful; they fail differently.
+#   curves. Neither is more powerful, but depending on the problem one may be easier to train than the other.
 
 # %% [markdown]
 
@@ -141,45 +135,41 @@ fig.tight_layout()
 
 # %% [markdown]
 
-# Given pairs $(x_i, y_i)$ we want the network to reproduce them. The obvious
-# measure of mismatch is the **mean squared error**,
+# Given pairs $(x_i, y_i)$, assume
 #
-# $$\mathrm{MSE}(\phi) = \frac{1}{N} \sum_{i=1}^{N}
-#   \big(\mathrm{MLP}_\phi(x_i) - y_i\big)^2 ,$$
+# $$y_i = y(x_i) + \epsilon_i, \qquad \epsilon_i \sim \mathcal N(0, \sigma^2)$$
 #
-# minimized over all of $\phi$ at once by **gradient descent** — repeatedly
-# stepping in the direction of steepest descent,
+# for an unknown function $y(x)$. The network's job is to approximate it,
+# $\mathrm{MLP}_\phi(x) \approx y(x)$, and we fit it by **maximum likelihood**:
+# make the data we observed as probable as possible under the model.
 #
-# $$\phi_{k+1} = \phi_k - \eta\, \nabla_\phi \mathcal L(\phi_k),
-#   \qquad k = 0, 1, 2, \dots$$
+# Gaussian noise gives each observation the density
+#
+# $$p(y_i \,|\, x_i, \phi, \sigma) = \frac{1}{\sqrt{2\pi\sigma^2}}
+#   \exp\!\left[-\frac{\big(y_i - \mathrm{MLP}_\phi(x_i)\big)^2}{2\sigma^2}\right],$$
+#
+# and the $N$ of them multiply. Taking the log (products underflow) and flipping
+# the sign (optimizers minimize) leaves the **negative log-likelihood**, averaged
+# over the data and dropping the constant $\tfrac12\log 2\pi$:
+#
+# $$\underbrace{\mathcal L(\phi, \sigma)}_{\text{NLL}}
+#   = \frac{\mathrm{MSE}(\phi)}{2\sigma^2} + \log\sigma ,
+#   \qquad \mathrm{MSE}(\phi) = \frac{1}{N} \sum_{i=1}^{N}
+#   \big(\mathrm{MLP}_\phi(x_i) - y_i\big)^2 .$$
+#
+# The **mean squared error** is the only $\phi$-dependent part, so at fixed
+# $\sigma$ minimizing the NLL is minimizing the MSE. What $\sigma$ adds is a
+# scale: errors measured in units of the claimed uncertainty, with $\log\sigma$
+# preventing $\sigma \to 0$. Minimizing over $\sigma$ as well gives
+# $\hat\sigma^2 = \mathrm{MSE}_{\rm train}$, which we plug in each epoch rather
+# than fit. (Lower NLL is better; unlike an MSE it can go negative.)
+#
+# We minimize by **gradient descent**,
+#
+# $$\phi_{k+1} = \phi_k - \eta\, \nabla_\phi \mathcal L(\phi_k),$$
 #
 # from the random $\phi_0$ above, with the **learning rate** $\eta$ setting the
-# step size. Each iteration $k$ over all $N$ examples is one *epoch*.
-#
-# **We monitor something better than the MSE.** An MSE says how large the errors
-# are, not whether the network's *confidence* is justified. So give the model a
-# noise level $\sigma$: assume each target is drawn as
-# $y_i \sim \mathcal N(\mathrm{MLP}_\phi(x_i), \sigma^2)$. The model now assigns
-# a **probability density** to any observed $y_i$, and we can ask how probable
-# the data it was shown actually is.
-#
-# That number is the **likelihood**. Densities of many points multiply, which
-# underflows, so one always works with the logarithm; and optimizers minimize
-# rather than maximize, so one flips the sign. The result — the quantity we will
-# plot on every loss axis from here on — is the **negative log-likelihood**, or
-# **NLL**: minus the log of the probability the model assigns to the data.
-# *Lower is better, and unlike an MSE it can be negative.* For a Gaussian it
-# works out to
-#
-# $$\underbrace{\mathcal L}_{\rm NLL} = \frac{\mathrm{MSE}}{2\sigma^2}
-#   \;+\; \log\sigma \;+\; \underbrace{\tfrac12\log 2\pi}_{\rm constant,\ dropped},
-#   \qquad \hat\sigma^2 = \mathrm{MSE}_{\rm train}.$$
-#
-# Read the two terms: the first is the familiar squared error, now measured in
-# units of the claimed uncertainty, and the second is what stops the model
-# claiming $\sigma \to 0$. The best $\sigma$ for a given network is simply its
-# root-mean-square training residual, so we plug that in each epoch rather than
-# fitting it.
+# step size. One pass over all $N$ examples is an *epoch*.
 #
 # ```text
 # ALGORITHM  fit(net, train, validation, eta, patience)
