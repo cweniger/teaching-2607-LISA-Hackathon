@@ -162,12 +162,36 @@ x_obs = x_clean + np.random.default_rng(2607).standard_normal(
     2 * N_T).astype(np.float32)
 print(f'observation built, clean A+E SNR = {np.sqrt((x_clean ** 2).sum()):.0f}')
 
+def unwhiten_td(y_white, white):
+    """Exact inverse of whiten_td: whitened TD -> raw (coloured) strain TD.
+    Applied to the SAME realisation, so the two plots below show the same
+    data before and after whitening."""
+    Y = np.fft.rfft(y_white)
+    Y[0] = 0.0
+    Y[1:] = Y[1:] / (white * np.sqrt(N_T / 2))
+    return np.fft.irfft(Y, n=N_T) / DT
+
+
 tgrid = np.arange(N_T) * DT
+
+# --- raw data: what the instrument actually delivers, noise-dominated
+fig, ax = plt.subplots(figsize=(10, 2.6))
+ax.plot(tgrid / 3600, unwhiten_td(x_obs[:N_T], WHITE_A), lw=.4,
+        label='observed (A, raw)')
+ax.plot(tgrid / 3600, unwhiten_td(x_clean[:N_T], WHITE_A), 'C1', lw=.8,
+        label='hidden signal')
+ax.legend(loc='upper left', fontsize=8)
+ax.set(xlabel='t [hours]', ylabel='strain (TDI A)',
+       title='before whitening: raw TDI A strain (merger visible, inspiral buried)')
+fig.tight_layout()
+
+# --- after whitening: unit-variance noise, signal visible at merger
 fig, ax = plt.subplots(figsize=(10, 2.6))
 ax.plot(tgrid / 3600, x_obs[:N_T], lw=.4, label='observed (A, whitened)')
 ax.plot(tgrid / 3600, x_clean[:N_T], 'C1', lw=.8, label='hidden signal')
 ax.legend(loc='upper left', fontsize=8)
-ax.set(xlabel='t [hours]', ylabel='whitened amplitude')
+ax.set(xlabel='t [hours]', ylabel='whitened amplitude',
+       title='after whitening: this is what the network sees')
 fig.tight_layout()
 
 # %% [markdown]
