@@ -744,7 +744,7 @@ fig.tight_layout()
 # building for inference, where $c$ will be *data* and $\theta$ the parameters we
 # want.
 #
-# Not that this approach generally stops working outside the training range: the extrapolated panel gets
+# Note that this approach generally stops working outside the training range: the extrapolated panel gets
 # the rough size wrong and the structure blurred. Amortization **interpolates**; it
 # does not extrapolate.
 
