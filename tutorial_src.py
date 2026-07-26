@@ -1,4 +1,5 @@
 # %% [markdown]
+
 # # From MLPs to LISA: simulation-based inference, hands-on
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb)
@@ -19,9 +20,6 @@
 # > **Colab setup:** Runtime → Change runtime type → **T4 GPU**, then run all
 # > cells top to bottom. Everything also works on CPU, just slower.
 #
-# > **Reading path:** anything titled ***Aside*** is background you can skip on a
-# > first read; collapse those sections and what remains is the core path.
-#
 # > **New to PyTorch?** There is a short **FAQ at the end of this notebook**
 # > answering the things that trip people up on a first read (`.detach()`,
 # > `no_grad()`, why shapes are `(n, 1)`, what `state_dict` is). The official
@@ -31,6 +29,7 @@
 # > [`torch.optim`](https://pytorch.org/docs/stable/optim.html).
 
 # %%
+
 import copy
 import os
 import time
@@ -46,13 +45,16 @@ dev = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for comfort!)'))
 
 # %% [markdown]
+
 # ---
 # # Part 1 — Neural networks  *(~30 min)*
 
 # %% [markdown]
+
 # ## The network
 
 # %% [markdown]
+
 # A **multi-layer perceptron** (MLP) is a program that turns an input vector
 # into an output vector. The same object is called a *feed-forward network*, a
 # *dense network*, or a *fully connected network*. It is the building block of
@@ -81,6 +83,7 @@ print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for 
 # $\hat y$ can take any value.
 
 # %%
+
 class MLP(nn.Module):
     """A dense feed-forward network from R^d_in to R^d_out."""
 
@@ -99,6 +102,7 @@ class MLP(nn.Module):
         return self.out(h)          # W4 @ h + b4, no g     -> (n, d_out)
 
 # %% [markdown]
+
 # `nn.Linear` starts each $W$ and $b$ off at small random values, so an
 # untrained network is already a valid — if useless — function. Here is what
 # freshly initialized networks compute, with two different nonlinearities.
@@ -106,6 +110,7 @@ class MLP(nn.Module):
 # width 256 there are too many of them to see.)
 
 # %%
+
 xg = torch.linspace(-5, 5, 400)[:, None]
 
 fig, ax = plt.subplots(1, 2, figsize=(11, 3.4))
@@ -119,6 +124,7 @@ ax[0].set_ylabel(r'$\hat y$')
 fig.tight_layout()
 
 # %% [markdown]
+
 # Two things to take from this:
 #
 # - **The interesting behaviour lives at $O(1)$.** The curves bend inside the
@@ -130,20 +136,11 @@ fig.tight_layout()
 #   curves. Neither is more powerful; they fail differently.
 
 # %% [markdown]
-# ### Aside — how the initial values are chosen
 
-# %% [markdown]
-# By default `nn.Linear` draws each weight and bias uniformly from
-# $\pm 1/\sqrt{n_{\rm in}}$, where the **fan-in** $n_{\rm in}$ is the number of
-# inputs to that layer. Wider layers therefore start with smaller weights, which
-# keeps the scale of a layer's output roughly independent of its width — without
-# it, stacking wide layers would make activations grow or vanish geometrically
-# with depth.
-
-# %% [markdown]
 # ## Fitting with gradient descent
 
 # %% [markdown]
+
 # Given pairs $(x_i, y_i)$ we want the network to reproduce them. The obvious
 # measure of mismatch is the **mean squared error**,
 #
@@ -210,6 +207,7 @@ fig.tight_layout()
 # no longer have to tune — pass something large and let `patience` decide.
 
 # %%
+
 def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000,
         rewind=True):
     """Train on MSE; monitor the Gaussian negative log-likelihood; stop early.
@@ -251,54 +249,11 @@ def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000,
     return np.array(hist), best_ep
 
 # %% [markdown]
-# ### Aside — why the plug-in $\sigma$ costs nothing
 
-# %% [markdown]
-# Two conveniences hide in $\hat\sigma^2 = \mathrm{MSE}_{\rm train}$. First, it
-# is the exact maximum-likelihood $\sigma$ for the current network, so no
-# optimization is involved. Second, $\sigma$ drops out of
-# $\nabla_\phi \mathcal L$ entirely — minimizing the NLL over the network *is*
-# minimizing the MSE — so the gradient step is untouched and $\hat\sigma$ is
-# pure diagnostics. You could instead make $\sigma$ a learned `nn.Parameter`, but
-# then it lags the network by however long gradient descent takes to drag it
-# down, and the overfitting signal arrives late.
-
-# %% [markdown]
-# ### Aside — how `loss.backward()` gets the gradient
-
-# %% [markdown]
-# The loop needs $\partial \mathcal L / \partial \phi$ for all ~130 000
-# parameters. Finite differences would cost one forward pass each; **reverse-mode
-# automatic differentiation** — *backpropagation* — gets all of them for about
-# the cost of one.
-#
-# The trick is the chain rule applied right to left. Our network is a chain
-# $x \to h^{(1)} \to h^{(2)} \to h^{(3)} \to \hat y \to \mathcal L$, so
-#
-# $$\frac{\partial \mathcal L}{\partial W^{(1)}} =
-#   \frac{\partial \mathcal L}{\partial \hat y}\,
-#   \frac{\partial \hat y}{\partial h^{(3)}}\,
-#   \frac{\partial h^{(3)}}{\partial h^{(2)}}\,
-#   \frac{\partial h^{(2)}}{\partial h^{(1)}}\,
-#   \frac{\partial h^{(1)}}{\partial W^{(1)}} .$$
-#
-# Multiply those factors *left to right* and you propagate a single vector
-# backwards through the layers, reusing it for every parameter you pass. Going
-# the other way would mean carrying a full matrix per layer, which is what makes
-# forward-mode differentiation expensive when there are many parameters and one
-# output.
-#
-# PyTorch does the book-keeping for you. Every operation on a tensor that
-# `requires_grad` is recorded in a graph as it executes, `loss.backward()` walks
-# that graph backwards accumulating into each `p.grad`, and the graph is then
-# freed. Two consequences you meet in the code: gradients *accumulate*, hence
-# `opt.zero_grad()` each step, and anything you do not want recorded belongs
-# inside `torch.no_grad()`.
-
-# %% [markdown]
 # ## Example: measuring a frequency
 
 # %% [markdown]
+
 # Nothing in the network cared that the input was one number: `MLP(30, 1)` maps a
 # 30-dimensional vector to a scalar just as happily. That is the shape of every
 # problem in the rest of this notebook — **a lot of data in, few parameters
@@ -317,6 +272,7 @@ def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000,
 # here is ambiguous in principle.
 
 # %%
+
 N_GRID, NU_LO, NU_HI = 30, 1.0, 5.0
 tj = torch.linspace(0, 1, N_GRID)
 SPAN = NU_HI - NU_LO
@@ -344,6 +300,7 @@ ax[0].set_ylabel('d'); ax[0].legend(fontsize=8)
 fig.tight_layout()
 
 # %%
+
 freq_net = MLP(N_GRID, 1, 256)                      # 30 numbers in, 1 out
 hist, best_ep = fit(freq_net, d_tr, nu_tr, d_va, nu_va)
 
@@ -354,6 +311,7 @@ nu_true = (NU_LO + SPAN * nu_va).squeeze()
 resid = nu_est - nu_true
 
 # %%
+
 fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.2))
 ax[0].fill_between([NU_LO, NU_HI], [NU_LO - sigma_hat, NU_HI - sigma_hat],
                    [NU_LO + sigma_hat, NU_HI + sigma_hat], color='C0', alpha=.18,
@@ -372,6 +330,7 @@ ax[1].legend(fontsize=8)
 fig.tight_layout()
 
 # %%
+
 print('actual scatter, in bands of frequency:')
 for lo in range(1, 5):
     m = (nu_true >= lo) & (nu_true < lo + 1)
@@ -379,6 +338,7 @@ for lo in range(1, 5):
           f'   (model claims {sigma_hat:.3f})')
 
 # %% [markdown]
+
 # **Overfitting, unmistakably.** Remember that the NLL is minus the log
 # probability the model assigns to the data, so down is better and negative is
 # fine. The training NLL falls without limit, because
@@ -398,9 +358,11 @@ for lo in range(1, 5):
 # here, narrow there, and in general curved and multi-modal. That is Part 2.
 
 # %% [markdown]
+
 # ### Exercise 1
 
 # %% [markdown]
+
 # `experiment` below re-runs everything with whatever you change. Try:
 #
 # 1. **`rewind=False`** — keep the *last* epoch instead of the best one, i.e.
@@ -418,6 +380,7 @@ for lo in range(1, 5):
 #    must marginalize over but never infer.)
 
 # %%
+
 def experiment(n_train=300, width=256, patience=300, sigma=0.3,
                nu_hi=NU_HI, random_phase=False, rewind=True):
     """Re-run the frequency fit with different settings; returns (RMSE, sigma_hat)."""
@@ -437,12 +400,14 @@ def experiment(n_train=300, width=256, patience=300, sigma=0.3,
 
 
 # %%
+
 # TODO — your code here. Call experiment() a few times, changing one argument at
 # a time, and note the RMSE and the claimed sigma each run reports.
 experiment()
 
 
 # %%
+
 # @title Reference solution { display-mode: "form" }
 runs = {
     'baseline':          dict(),
@@ -464,6 +429,7 @@ for name, (r, sg) in res.items():
     print(f'{name:18s} {r:7.3f} {sg:8.3f} {r / sg:7.2f}')
 
 # %% [markdown]
+
 # **What you should see.** Switching early stopping off is the instructive one,
 # and not in the way you might expect: the RMSE actually *improves* slightly
 # (0.25 → 0.21 cycles), because more training does sharpen the point estimate.
@@ -486,10 +452,12 @@ for name, (r, sg) in res.items():
 # about.
 
 # %% [markdown]
+
 # ---
 # # Part 2 — Modeling distributions with flow matching  *(~35 min)*
 
 # %% [markdown]
+
 # Part 1 fitted a *function* — one number per input. Now we fit a **conditional
 # distribution**: given a condition $c$, produce samples of $\theta$. The lecture
 # covered why this is hard (a density must be non-negative and integrate to one,
@@ -507,9 +475,11 @@ for name, (r, sg) in res.items():
 # evaluate $p$, only sample from it.
 
 # %% [markdown]
+
 # ## Flow matching
 
 # %% [markdown]
+
 # Build the sampler out of a **flow**. Start from a unit Gaussian and move the
 # points continuously until they are distributed like $p(\theta|c)$. The motion
 # is described by a **velocity field** $v_\phi(\theta, t \,|\, c)$ — an MLP
@@ -519,9 +489,11 @@ for name, (r, sg) in res.items():
 # pass.
 
 # %% [markdown]
+
 # ### The mechanics, in three equations
 
 # %% [markdown]
+
 # Write $\theta_0$ for a point drawn from the Gaussian at $t=0$ and $\theta_1$
 # for a data point at $t=1$.
 #
@@ -567,9 +539,11 @@ for name, (r, sg) in res.items():
 # only ever transports an already-normalized Gaussian.
 
 # %% [markdown]
+
 # ## A family of target distributions
 
 # %% [markdown]
+
 # We need something a Gaussian cannot fake, and a *family* of them indexed by
 # $c$. Take a spiral — multi-modal along a curve — and let the condition rotate
 # it by $\varphi$ and scale it by $s$:
@@ -582,6 +556,7 @@ for name, (r, sg) in res.items():
 # range mean the same thing, and would leave a visible seam.
 
 # %%
+
 def target_spiral(phase, scale):
     """Samples on a rotated, scaled spiral. phase, scale: (n, 1) -> (n, 2)."""
     a = 3 * np.pi * torch.rand_like(phase).sqrt()     # angle along the arm
@@ -615,10 +590,12 @@ fig.suptitle('four members of the target family', y=1.02)
 fig.tight_layout()
 
 # %% [markdown]
+
 # The training set mixes *all* phases and scales together — 60000 points with no
 # labels beyond their own $(\varphi, s)$. Individually they look like noise:
 
 # %%
+
 fig, ax = plt.subplots(figsize=(4.2, 4.2))
 ax.plot(theta_tr[:8000, 0].cpu(), theta_tr[:8000, 1].cpu(), 'k.', ms=1, alpha=.25)
 ax.set(title='the training data, all conditions mixed', xlabel=r'$\theta_1$',
@@ -626,12 +603,15 @@ ax.set(title='the training data, all conditions mixed', xlabel=r'$\theta_1$',
 fig.tight_layout()
 
 # %% [markdown]
+
 # ## The implementation
 
 # %% [markdown]
+
 # Four short functions, used unchanged for the rest of the notebook.
 
 # %%
+
 # Generic MLP helper: same idea as Part 1's MLP class, but with configurable
 # input/output dimensions and depth.
 def mlp(d_in, d_out, hidden, layers):
@@ -681,6 +661,7 @@ def fm_sample(net, cond, d_theta, steps=64, return_path=False):
     return (th, torch.stack(path)) if return_path else th     # theta(1) ~ q_phi
 
 # %%
+
 def train_fm(net, th1, cond, steps=3000, batch=512, lr=1e-3, log=True):
     """Minimize fm_loss by Adam -- the same loop as Part 1's fit()."""
     opt = torch.optim.Adam(net.parameters(), lr=lr)      # holds pointers to phi
@@ -695,17 +676,21 @@ def train_fm(net, th1, cond, steps=3000, batch=512, lr=1e-3, log=True):
     return net
 
 # %% [markdown]
+
 # ## Train it
 
 # %%
+
 snet = VelocityNet(2, d_cond=3).to(dev)             # theta is 2-D, cond is 3 numbers
 train_fm(snet, theta_tr, cond_tr, steps=6000)
 
 # %% [markdown]
+
 # Now ask the trained network for particular conditions. The bottom-right panel
 # requests a **scale of 1.9**, well outside the $[0.6, 1.4]$ it was trained on.
 
 # %%
+
 REQUESTS = [(0.0, 1.0), (2.0, 1.0), (4.0, 1.0),
             (1.0, 0.7), (1.0, 1.3), (1.0, 1.9)]
 
@@ -725,6 +710,7 @@ fig.suptitle('one network, six requested conditions', y=1.0)
 fig.tight_layout()
 
 # %% [markdown]
+
 # **This is amortization.** The training data was a featureless smear in which no
 # individual spiral was visible, yet the network reproduces any member of the
 # family on request — it learned the whole map $c \mapsto p(\theta|c)$, not a
@@ -741,6 +727,7 @@ fig.tight_layout()
 # trajectories at one fixed condition:
 
 # %%
+
 p = torch.full((60, 1), 1.0, device=dev)
 s = torch.full((60, 1), 1.0, device=dev)
 _, path = fm_sample(snet, encode(p, s), 2, return_path=True)
@@ -756,6 +743,7 @@ ax.legend(fontsize=8)
 fig.tight_layout()
 
 # %% [markdown]
+
 # Every final sample traces back to one Gaussian base point. Note the routes are
 # **curved**, although training only ever used *straight* lines between random
 # pairs $(\theta_0, \theta_1)$: the network learns the *average* velocity over all
@@ -763,9 +751,11 @@ fig.tight_layout()
 # trajectory to connect the pair it was trained on.
 
 # %% [markdown]
+
 # ### Exercise 2
 
 # %% [markdown]
+
 # Write your own conditional target and fit it. `study_conditional` below does
 # everything once you supply a sampler with the signature
 # `my_target(c) -> (n, 2)`, where `c` is `(n, 1)` — one condition per row.
@@ -784,6 +774,7 @@ fig.tight_layout()
 #    on $c$?
 
 # %%
+
 def study_conditional(my_target, c_lo=0.0, c_hi=1.0, n_data=40000, steps=4000,
                       requests=None, sample_steps=64):
     """Fit a conditional flow to my_target(c) and compare against it."""
@@ -808,6 +799,7 @@ def study_conditional(my_target, c_lo=0.0, c_hi=1.0, n_data=40000, steps=4000,
     return net
 
 # %%
+
 # TODO — your code here: return (n, 2) samples for conditions c of shape (n, 1),
 # then hand it to study_conditional.
 def my_target(c):
@@ -815,6 +807,7 @@ def my_target(c):
 
 
 # %%
+
 # @title Reference solution { display-mode: "form" }
 def my_target(c):                                   # noqa: F811
     """A banana that rotates with c: structure changes, so extrapolation fails."""
@@ -828,6 +821,7 @@ def my_target(c):                                   # noqa: F811
 study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
 
 # %% [markdown]
+
 # **What to notice.** The rotating banana is learned cleanly inside its range,
 # and the last panel — $c = 1.4$, well past the training range of $[0,1]$ — is
 # wrong in a revealing way: a rotation is not a rescaling, so there is nothing
@@ -837,6 +831,7 @@ study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
 # changes the *structure* of the distribution or merely its size.
 
 # %% [markdown]
+
 # ---
 # # Part 3 — From generative models to inference: SBI  *(~15 min)*
 #
@@ -884,6 +879,7 @@ study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
 # a face-on binary far away looks like an edge-on binary nearby.)
 
 # %%
+
 G = 9.81
 SIGMA_X = 0.4                                # measurement noise on the range [m]
 BALL_LO = torch.tensor([8.0, 0.15], device=dev)      # v [m/s], alpha [rad]
@@ -913,10 +909,12 @@ print(f'true parameters:  v = {THETA_TRUE[0, 0]:.1f} m/s, '
 print(f'noise-free range: r = {ball_range(THETA_TRUE).item():.2f} m')
 
 # %% [markdown]
+
 # The reference posterior is analytic here (uniform prior times a Gaussian
 # likelihood on one number), so we can check the network against the truth.
 
 # %%
+
 def ball_true_logpost(vg, ag, x_obs, n_throws=1):
     """Exact log-posterior on a (v, alpha) grid, up to a constant."""
     V, A = torch.meshgrid(vg, ag, indexing='ij')
@@ -937,6 +935,7 @@ def plot_ball_truth(ax, x_obs, n_throws=1):
            xlim=(8, 12), ylim=(np.degrees(0.15), 90 - np.degrees(0.15)))
 
 # %% [markdown]
+
 # ## Train — with nothing new to write
 #
 # `VelocityNet`, `fm_loss`, `train_fm` and `fm_sample` are the Part 2
@@ -949,6 +948,7 @@ def plot_ball_truth(ax, x_obs, n_throws=1):
 # $\sigma/\sqrt{20}$).
 
 # %%
+
 def zscore(a, mean, std):
     return (a - mean) / std
 
@@ -975,6 +975,7 @@ print('twenty throws:')
 post_20, x_obs_20 = run_ball_sbi(n_throws=20)
 
 # %%
+
 fig, ax = plt.subplots(1, 2, figsize=(11, 4.6), sharey=True)
 for a, post, xo, nt in [(ax[0], post_1, x_obs_1, 1), (ax[1], post_20, x_obs_20, 20)]:
     plot_ball_truth(a, xo, nt)
@@ -985,6 +986,7 @@ ax[1].set_ylabel('')
 fig.tight_layout()
 
 # %% [markdown]
+
 # **What the posterior looks like.** Not a blob. A curved ridge that traces
 # every $(v, \alpha)$ landing the ball where we saw it, folded back on itself
 # about $45°$: the two arms meet at the slowest speed that can reach this far,
@@ -1019,10 +1021,12 @@ fig.tight_layout()
 #    no reference posterior at all.
 
 # %%
+
 # TODO — your code here.
 
 
 # %%
+
 # @title Reference solution { display-mode: "form" }
 # 1: amortization over the observed range, in one trained network.
 theta_b = draw_ball_prior(40000)
@@ -1085,6 +1089,7 @@ ax[1].legend(fontsize=8)
 fig.tight_layout()
 
 # %% [markdown]
+
 # **Answers.** (1) As the observed range approaches the maximum achievable one,
 # $v^2/g$ at $\alpha = 45°$, the two arms squeeze together and merge: only
 # throws near $45°$ can reach that far, so the ambiguity disappears and the
@@ -1103,6 +1108,7 @@ fig.tight_layout()
 # answer exists to compare against.
 
 # %% [markdown]
+
 # ---
 # # Part 4 — A toy gravitational wave: compression + sequential zoom  *(~30 min)*
 #
@@ -1121,6 +1127,7 @@ fig.tight_layout()
 #    sequentially** (this is dynamic SBI).
 
 # %%
+
 N_T = 1024
 tgrid = torch.linspace(0, 1, N_T, device=dev)
 PRIOR_LO = torch.tensor([40., 0.], device=dev)      # f0 [cycles], fdot
@@ -1152,6 +1159,7 @@ ax.legend(loc='upper right'); ax.set(xlabel='t', ylabel='d(t)')
 fig.tight_layout()
 
 # %% [markdown]
+
 # ## Step 1: compression with PCA
 #
 # We can't feed 1024 numbers into the conditioning — most of them are noise.
@@ -1160,6 +1168,7 @@ fig.tight_layout()
 # values tell us each component's signal-to-noise; we keep the top $K$.
 
 # %%
+
 def fit_pca(theta_bank, K=64):
     clean = chirp_sim(theta_bank, noise=0.0)
     mu = clean.mean(0)
@@ -1186,6 +1195,7 @@ ax.legend()
 fig.tight_layout()
 
 # %% [markdown]
+
 # Note how *flat* that spectrum is: at the wide prior, chirps with different
 # $(f_0,\dot f)$ are nearly orthogonal waveforms, so no small linear basis
 # captures them all (for the real MBHB prior it takes ~2000 components!).
@@ -1194,6 +1204,7 @@ fig.tight_layout()
 # ## Step 2: amortized SBI from the wide prior
 
 # %%
+
 def summarize(x, mu, V):
     return (x - mu) @ V.T
 
@@ -1216,6 +1227,7 @@ s_obs = zscore(summarize(x_obs_chirp, mu0, V0), s_mu, s_sd)
 post0 = fm_sample(cnet, s_obs.expand(4000, K_PCA), 2) * th_sd + th_mu
 
 # %%
+
 def chirp_true_logpost(f0g, fdg, x_obs):
     """Exact posterior on a grid, phase marginalized analytically:
     the signal is linear in (cos phi, sin phi) -> 2-basis matched filter."""
@@ -1256,6 +1268,7 @@ ax.set_title('amortized: roughly the right place, far too blurry')
 fig.tight_layout()
 
 # %% [markdown]
+
 # The network found the right region, and it does contain the truth — but it is
 # **enormously** wider than the true posterior, which fits entirely inside that
 # little black box (we can compute it exactly here, a luxury the real problem
@@ -1267,11 +1280,13 @@ fig.tight_layout()
 # problem. Count the training samples that land inside those contours:
 
 # %%
+
 inside = ((theta_bank[:, 0] > F0_LO) & (theta_bank[:, 0] < F0_HI)
           & (theta_bank[:, 1] > FD_LO) & (theta_bank[:, 1] < FD_HI))
 print(f'training samples in the posterior neighbourhood: {inside.sum().item()} / {len(theta_bank)}')
 
 # %% [markdown]
+
 # **Sample starvation:** the posterior occupies a tiny fraction of the prior
 # volume, so a couple of dozen of the 32768 training examples land where the
 # answer lives — and the network is effectively interpolating between them.
@@ -1290,6 +1305,7 @@ print(f'training samples in the posterior neighbourhood: {inside.sum().item()} /
 # what production codes like `falcon` do under the hood).
 
 # %%
+
 def fm_logprob(net, w1, cond, steps=64):
     """log q(w1|cond) via reverse ODE + divergence (exact, per-dimension autograd)."""
     w = w1.clone()
@@ -1307,6 +1323,7 @@ def fm_logprob(net, w1, cond, steps=64):
     return base + logdet
 
 # %%
+
 def sequential_chirp(n_rounds=8, gamma=0.5, n_keep=2048, refit_pca=True,
                      loss_fn=fm_loss, verbose=True):
     torch.manual_seed(1)
@@ -1364,6 +1381,7 @@ def sequential_chirp(n_rounds=8, gamma=0.5, n_keep=2048, refit_pca=True,
 posts, spectra = sequential_chirp()
 
 # %%
+
 fig, ax = plt.subplots(1, 3, figsize=(14, 4.0))
 colors = plt.cm.viridis(np.linspace(0, .9, len(posts)))
 for r, (post, c) in enumerate(zip(posts, colors), 1):
@@ -1388,6 +1406,7 @@ ax[2].legend(fontsize=8)
 fig.tight_layout()
 
 # %% [markdown]
+
 # Two things happened at once:
 # 1. **The posterior tightened** toward the true (black) contours, round by
 #    round — same network size, same per-round simulation budget; only the
@@ -1432,6 +1451,7 @@ fig.tight_layout()
 #    "16 nats too wide" to "1 nat from mathematically optimal".
 
 # %% [markdown]
+
 # ---
 # # Where next: the real thing, live
 #
@@ -1514,6 +1534,7 @@ fig.tight_layout()
 # building a network makes that network's random starting point reproducible.
 
 # %%
+
 # (housekeeping cell — saves all figures when this notebook is executed as a
 # test script; does nothing in an interactive colab session)
 if os.environ.get('TUTORIAL_SAVE_FIGS'):
@@ -1523,5 +1544,6 @@ if os.environ.get('TUTORIAL_SAVE_FIGS'):
     print(f'saved {len(plt.get_fignums())} figures')
 
 # %% [markdown]
+
 # *Generated for the LISA SBI tutorial, 2026-07-27. Built and battle-tested on
 # the LDC1-1 MBHB analysis campaign of July 2026.*
