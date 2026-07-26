@@ -270,13 +270,21 @@ tj = torch.linspace(0, 1, N_GRID)
 SPAN = NU_HI - NU_LO
 
 
-def sine_data(n, sigma=0.3, seed=0, random_phase=False):
-    """n examples: x (n, 30) noisy samples, and the rescaled frequency (n, 1)."""
+def sine_data(n, sigma=0.3, seed=0, random_phase=False, nu_hi=NU_HI):
+    """n examples: x (n, 30) noisy samples, and the target frequency (n, 1).
+
+    Data normalisation: the inputs x are O(1) by construction, and the target
+    is returned *rescaled* to [0, 1] as (nu - NU_LO) / span rather than in
+    cycles -- networks train much better when inputs and targets are O(1) and
+    the initial weights therefore produce outputs of roughly the right size.
+    Multiply by span (and add NU_LO) to read anything back in cycles.
+    """
     torch.manual_seed(seed)
-    nu = NU_LO + SPAN * torch.rand(n, 1)                     # nu ~ U(1, 5)
+    span = nu_hi - NU_LO
+    nu = NU_LO + span * torch.rand(n, 1)                     # nu ~ U(1, nu_hi)
     phi = torch.rand(n, 1) * 2 * np.pi if random_phase else torch.zeros(n, 1)
     x = torch.sin(2 * np.pi * nu * tj + phi) + sigma * torch.randn(n, N_GRID)
-    return x, (nu - NU_LO) / SPAN
+    return x, (nu - NU_LO) / span
 
 
 x_tr, nu_tr = sine_data(300, seed=0)                # training set
@@ -293,36 +301,66 @@ fig.tight_layout()
 
 # %%
 
+# Two helpers, so that every fit below can be read out and plotted the same way.
+
+def evaluate(net, hist, best_ep, x_val, nu_val, nu_hi=NU_HI):
+    """Read a finished fit out in cycles, undoing the [0, 1] target rescaling.
+
+    Returns (nu_true, nu_est, rmse, sigma_hat) for the held-out set, where
+    rmse is the estimator's *real* scatter and sigma_hat is the error bar the
+    model *claims* -- one number for every input, taken from the plug-in
+    sigma^2 (the mean squared training residual) at the epoch we kept.
+    """
+    span = nu_hi - NU_LO
+    sigma_hat = hist[best_ep, 2] * span                        # claimed, in cycles
+    with torch.no_grad():
+        nu_est = (NU_LO + span * net(x_val)).squeeze()
+    nu_true = (NU_LO + span * nu_val).squeeze()
+    rmse = (nu_est - nu_true).pow(2).mean().sqrt().item()       # real, in cycles
+    return nu_true, nu_est, rmse, sigma_hat
+
+
+def plot_fit(hist, best_ep, nu_true, nu_est, sigma_hat, nu_hi=NU_HI, label=None):
+    """Left: estimate against truth, with the band the model claims.
+    Right: the two negative log-likelihood curves and the epoch we kept."""
+    rmse = (nu_est - nu_true).pow(2).mean().sqrt()
+    fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.2))
+    ax[0].fill_between([NU_LO, nu_hi], [NU_LO - sigma_hat, nu_hi - sigma_hat],
+                       [NU_LO + sigma_hat, nu_hi + sigma_hat], color='C0',
+                       alpha=.18,
+                       label=fr'model claims $\pm\hat\sigma$ = {sigma_hat:.2f} cycles')
+    ax[0].plot([NU_LO, nu_hi], [NU_LO, nu_hi], 'k--', lw=1)
+    ax[0].plot(nu_true, nu_est, 'C0.', ms=2, alpha=.35, label='held-out data')
+    ax[0].set(xlabel=r'true $\nu$ [cycles]', ylabel=r'estimated $\nu$ [cycles]',
+              aspect='equal', title=f'held-out RMSE {rmse:.3f} cycles')
+    ax[0].legend(fontsize=8, loc='upper left')
+
+    lo = hist[:, 1].min()                            # frame on the validation dip
+    ax[1].plot(hist[:, 0], lw=1, label='training NLL')
+    ax[1].plot(hist[:, 1], lw=1, label='validation NLL')
+    ax[1].axvline(best_ep, color='k', ls=':', lw=1, label='best epoch (kept)')
+    ax[1].set(xlabel='epoch', ylabel='negative log-likelihood',
+              ylim=(lo - 1.8, lo + 2.5))
+    ax[1].legend(fontsize=8)
+    if label:
+        fig.suptitle(label, fontsize=10)
+    fig.tight_layout()
+
+# %%
+
 freq_net = MLP(N_GRID, 1, 256)                      # 30 numbers in, 1 out
 hist, best_ep = fit(freq_net, x_tr, nu_tr, x_va, nu_va)
 
-sigma_hat = hist[best_ep, 2] * SPAN                 # plug-in sigma, in cycles
-with torch.no_grad():
-    nu_est = (NU_LO + SPAN * freq_net(x_va)).squeeze()
-nu_true = (NU_LO + SPAN * nu_va).squeeze()
+nu_true, nu_est, rmse, sigma_hat = evaluate(freq_net, hist, best_ep, x_va, nu_va)
 resid = nu_est - nu_true
 
 # %%
 
-fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.2))
-ax[0].fill_between([NU_LO, NU_HI], [NU_LO - sigma_hat, NU_HI - sigma_hat],
-                   [NU_LO + sigma_hat, NU_HI + sigma_hat], color='C0', alpha=.18,
-                   label=fr'model: $\pm\hat\sigma$ = {sigma_hat:.2f} cycles')
-ax[0].plot([NU_LO, NU_HI], [NU_LO, NU_HI], 'k--', lw=1)
-ax[0].plot(nu_true, nu_est, 'C0.', ms=2, alpha=.35, label='held-out data')
-ax[0].set(xlabel=r'true $\nu$ [cycles]', ylabel=r'estimated $\nu$ [cycles]',
-          aspect='equal', title=f'RMSE {resid.pow(2).mean().sqrt():.3f} cycles')
-ax[0].legend(fontsize=8, loc='upper left')
-
-ax[1].plot(hist[:, 0], lw=1, label='training NLL')
-ax[1].plot(hist[:, 1], lw=1, label='validation NLL')
-ax[1].axvline(best_ep, color='k', ls=':', lw=1, label='best epoch (kept)')
-ax[1].set(xlabel='epoch', ylabel='negative log-likelihood', ylim=(-3.2, 1.0))
-ax[1].legend(fontsize=8)
-fig.tight_layout()
+plot_fit(hist, best_ep, nu_true, nu_est, sigma_hat)
 
 # %%
 
+# RMSE = the real scatter on held-out data; sigma_hat = the error bar claimed.
 print('actual scatter, in bands of frequency:')
 for lo in range(1, 5):
     m = (nu_true >= lo) & (nu_true < lo + 1)
@@ -374,20 +412,32 @@ for lo in range(1, 5):
 # %%
 
 def experiment(n_train=300, width=256, patience=300, sigma=0.3,
-               nu_hi=NU_HI, random_phase=False, rewind=True):
-    """Re-run the frequency fit with different settings; returns (RMSE, sigma_hat)."""
-    global NU_HI, SPAN
-    NU_HI, SPAN = nu_hi, nu_hi - NU_LO             # let the band be changed
-    xt, nt = sine_data(n_train, sigma, seed=0, random_phase=random_phase)
-    xv, nv = sine_data(2000, sigma, seed=1, random_phase=random_phase)
+               nu_hi=NU_HI, random_phase=False, rewind=True, plot=True,
+               label=None):
+    """Re-run the whole frequency fit with one setting changed, and plot it.
+
+    Draws a fresh training set of n_train examples and the usual 2000-example
+    held-out set (a different seed, so it is genuinely unseen), builds an MLP of
+    the given width, fits it with early stopping, then draws the same two panels
+    as above and prints the two numbers to compare:
+
+      RMSE       the real scatter of the estimate on held-out data, in cycles
+      sigma_hat  the single error bar the model claims, also in cycles
+
+    Their ratio is how honest the fit is: 1.0 would be perfectly calibrated,
+    larger means over-confident. Returns (rmse, sigma_hat).
+    """
+    xt, nt = sine_data(n_train, sigma, seed=0, random_phase=random_phase,
+                       nu_hi=nu_hi)                # nu_hi is passed through, so
+    xv, nv = sine_data(2000, sigma, seed=1, random_phase=random_phase,
+                       nu_hi=nu_hi)                # no global state is touched
     net = MLP(N_GRID, 1, width)
     h, bep = fit(net, xt, nt, xv, nv, patience=patience, rewind=rewind)
-    with torch.no_grad():
-        r = (SPAN * (net(xv) - nv)).squeeze()
-    rmse, sig = r.pow(2).mean().sqrt().item(), h[bep, 2] * SPAN
-    print(f'  RMSE {rmse:.3f} cycles,  model claims {sig:.3f}  '
-          f'-> off by x{rmse / sig:.2f}')
-    NU_HI, SPAN = 5.0, 4.0                         # restore the defaults
+    nu_t, nu_e, rmse, sig = evaluate(net, h, bep, xv, nv, nu_hi=nu_hi)
+    print(f'  held-out RMSE {rmse:.3f} cycles,  model claims '
+          f'sigma_hat {sig:.3f}  -> off by x{rmse / sig:.2f}')
+    if plot:
+        plot_fit(h, bep, nu_t, nu_e, sig, nu_hi=nu_hi, label=label)
     return rmse, sig
 
 
@@ -413,8 +463,9 @@ runs = {
 }
 res = {}
 for name, kw in runs.items():
-    print(f'{name}:')
-    res[name] = experiment(**kw)
+    print(f'{name}:')                              # panels for the two that
+    plot = name in ('baseline', 'no early stopping')   # make the point; the rest
+    res[name] = experiment(label=name, plot=plot, **kw)   # go into the table
 
 print(f'\n{"setting":18s} {"RMSE":>7s} {"claims":>8s} {"ratio":>7s}')
 for name, (r, sg) in res.items():
