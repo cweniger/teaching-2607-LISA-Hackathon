@@ -2,6 +2,11 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb)
 
+**[Intro slides](https://cweniger.github.io/teaching-2607-LISA-Hackathon/)** —
+the 30-minute concept lecture given before the tutorial: the science case,
+Bayesian inference, neural networks, SBI, flow matching (with a live demo of
+the flow), and sequential SBI.
+
 A 90-minute hands-on tutorial for the LISA Hackathon (July 2026): from
 fitting a sine curve with a neural network to inferring the parameters of a
 massive black-hole binary in simulated LISA data — with the same ten-line
@@ -36,6 +41,7 @@ cell) or accepts a manual upload.
 | `build_notebook.py` | `*_src.py` → `.ipynb` converter |
 | `make_tutorial_simbank.py` | regenerates `mbhb_simbank.npz` |
 | `DESIGN_NOTES.md` | why the tutorial is built this way |
+| `docs/` | the intro slide deck, served by GitHub Pages (reveal.js) |
 
 The two companion notebooks need no pre-simulated data: they install the
 lisabeta waveform stack from PyPI wheels (~20 s on Colab) and simulate
