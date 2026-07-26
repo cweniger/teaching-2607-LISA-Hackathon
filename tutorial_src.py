@@ -941,11 +941,12 @@ def ridge(x_obs, v):
     return a, np.pi / 2 - a                    # the line drive and the lob
 
 
-def plot_ridge(ax, x_obs):
+def plot_ridge(ax, x_obs, label=None):
     """Draw that curve on a (v, alpha) plane, and set up the axes."""
     v = torch.linspace(THETA_LO[0], THETA_HI[0], 200, device=dev)
-    for a in ridge(x_obs, v):
-        ax.plot(v.cpu(), np.degrees(a.cpu()), 'k--', lw=1)
+    for i, a in enumerate(ridge(x_obs, v)):
+        ax.plot(v.cpu(), np.degrees(a.cpu()), 'k--', lw=1,
+                label=label if i == 0 else None)
     ax.set(xlabel='v [m/s]', ylabel=r'$\alpha$ [deg]',
            xlim=(8, 12), ylim=(np.degrees(0.15), 90 - np.degrees(0.15)))
 
@@ -1078,17 +1079,25 @@ def sample_x2(theta, n_throws=1):
 x_b2 = sample_x2(theta_b, 1)
 x2mu, x2sd = x_b2.mean(0), x_b2.std(0)
 net_b2 = VelocityNet(2, d_cond=2).to(dev)
-train_fm(net_b2, zscore(theta_b, tmu_b, tsd_b), zscore(x_b2, x2mu, x2sd), log=False)
+train_fm(net_b2, zscore(theta_b, tmu_b, tsd_b), zscore(x_b2, x2mu, x2sd),
+         steps=6000, log=False)          # this posterior is small: train longer
 
 x_obs2 = sample_x2(THETA_TRUE, 1)
 post2 = (fm_sample(net_b2, zscore(x_obs2, x2mu, x2sd).expand(6000, 2), 2)
          * tsd_b + tmu_b).cpu()
 
-fig, ax = plt.subplots(figsize=(5.5, 4.4))
-plot_ridge(ax, x_obs2[0, 0].item())
-ax.plot(post2[:, 0], np.degrees(post2[:, 1]), 'C2.', ms=1.5, alpha=.25)
+fig, ax = plt.subplots(figsize=(5.8, 4.6))
+plot_ridge(ax, x_obs2[0, 0].item(), label='range alone')
+# the other observable has its own degeneracy: T = 2 v sin(alpha) / g = const
+vv = torch.linspace(THETA_LO[0], THETA_HI[0], 200, device=dev)
+sa = G * x_obs2[0, 1] / (2 * vv)                          # = sin(alpha)
+ax.plot(vv.cpu(), np.degrees(torch.asin(sa.masked_fill(sa > 1, float('nan'))).cpu()),
+        'k:', lw=1.4, label='time of flight alone')
+ax.plot(post2[:, 0], np.degrees(post2[:, 1]), 'C2.', ms=1.5, alpha=.25,
+        label='posterior from both')
 ax.plot(THETA_TRUE[0, 0].cpu(), np.degrees(THETA_TRUE[0, 1].cpu()), 'r*', ms=15)
-ax.set_title('range + time of flight: one mode left')
+ax.legend(fontsize=8, markerscale=6, loc='upper right')
+ax.set_title('two observables: the posterior sits where the curves cross')
 fig.tight_layout()
 
 # %% [markdown]
@@ -1099,8 +1108,11 @@ fig.tight_layout()
 # posterior becomes a single blob pinned to the corner of the prior. (2) The
 # time of flight depends on $\sin\alpha$, not $\sin 2\alpha$, and is therefore
 # *not* symmetric about $45°$ — one extra number breaks the reflection and one
-# mode dies. Choosing what to measure is inference design, and it beats any
-# amount of network tuning.
+# mode dies. Each observable has its own degeneracy curve, and the posterior
+# collapses onto where the two cross; note that it does **not** follow either
+# curve, and that it lies closer to the time-of-flight one, which is the sharper
+# measurement here. Choosing what to measure is inference design, and it beats
+# any amount of network tuning.
 
 # %% [markdown]
 
