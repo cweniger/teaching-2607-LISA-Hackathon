@@ -1,0 +1,3219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Learning from Simulations &mdash; LISA Hackathon 2026</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/white.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap">
+  <link rel="stylesheet" href="lib/presentation.css">
+</head>
+<body data-presentation="LISA Hackathon &mdash; 27 July 2026">
+
+<div class="reveal">
+  <div class="slides">
+
+    <section class="title-slide">
+      <div class="stack">
+        <h1 style="text-align:left; font-size:2.5em">Learning from Simulations</h1>
+        <h3 style="text-align:left; font-size:1.9em;">Simulation-based inference for gravitational-wave data analysis</h3>
+        <p class="title-meta">
+          Christoph Weniger &mdash; University of Amsterdam (GRAPPA)<br>
+          LISA Hackathon &mdash; 27 July 2026<br><span style="color:#2980b9;">Concept lecture (30 min) before the hands-on tutorial</span>
+        </p>
+        <p style="text-align:left; font-size:0.62em; color:#7f8c8d; line-height:1.5; margin-top:18px;">
+          <strong style="color:#2c3e50;">With:</strong>
+          James Alvey (University of Cambridge, Kavli Institute for Cosmology) &middot;
+          Noemi Anau Montel (Max Planck Institute for Astrophysics, Garching) &middot;
+          Uddipta Bhardwaj (ETH Zurich, Institute for Particle Physics and Astrophysics) &middot;
+          Philippa S. Cole (Queen Mary University of London) &middot;
+          Huifang Lyu (University of Amsterdam) &middot;
+          Benjamin Kurt Miller (Meta) &middot;
+          Joy Sanghavi (University of Amsterdam) &middot;
+          Oleg Savchenko (University of Amsterdam, GRAPPA) &middot;
+          Lorenzo Speri (European Space Agency)
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 1 — Introduction & Motivation                        -->
+    <!-- ============================================================ -->
+    
+
+<section class="section-slide">
+      <div class="stack">
+        <div class="grad-bar"></div>
+        <h1>Introduction &amp; Motivation</h1>
+        <p>Better instruments improve precision &mdash; and complicate inference.</p>
+        <div class="grad-bar below"></div>
+      </div>
+    </section>
+
+    <!-- Slide 4 — Open questions: full-width Universe-timeline figure on top, bullets below -->
+    
+
+<section style="padding:0 !important; background:#0b1f3a; overflow:hidden;
+                    display:flex; align-items:center; justify-content:center;">
+      <img src="img/p06_body.png"
+           style="display:block; margin:0 auto; max-width:100%; max-height:100%;
+                  width:100%; height:auto; object-fit:contain;">
+      <p style="position:absolute; bottom:14px; right:20px; margin:0;
+                font-size:0.6em; color:#bdc3c7;">Credit: ESA</p>
+    </section>
+
+    <!-- Slide 7 — LISA mission (vertical stack; 7b below is an optional down-slide) -->
+    
+
+<section>
+      <p class="eyebrow">Motivation &gt; The LISA mission</p>
+      <h2>LISA &mdash; sources and science</h2>
+      <div style="display:flex; gap:18px; align-items:center;">
+        <div style="flex:0.7; font-size:0.85em">
+          <ul>
+            <li>Super-massive black-hole binaries</li>
+            <li>Compact binaries</li>
+            <li>Stellar BH binaries</li>
+            <li>Extreme mass-ratio inspirals</li>
+            <li>Early Universe: GW background, cosmic strings</li>
+            <li>Astrophysical backgrounds</li>
+            <li>The Unknown</li>
+          </ul>
+        </div>
+        <div style="flex:1.3; text-align:center;">
+          <img src="img/p08_00.png" style="width:100%; max-width:680px;">
+        </div>
+      </div>
+      <div class="box box-blue" style="margin-top:12px; font-size: 22px;">
+        <strong>Science objectives</strong><br>
+        <ul>
+          <li>SO5 &mdash; Fundamental gravity &amp; BH nature</li>
+          <li>SO6 &mdash; Cosmology with standard sirens</li>
+          <li>SO7 &mdash; Stochastic GW backgrounds</li>
+        </ul>
+      </div>
+      <p style="font-size:0.7em; color:#7f8c8d; text-align:right; margin:4px 0 0;">arXiv:2402.07571</p>
+    </section>
+
+    <!-- Slide 9 — LISA is not LIGO in space -->
+    
+
+<section>
+      <p class="eyebrow">Motivation &gt; The LISA challenge</p>
+      <h2>LISA is not LIGO in space &mdash; analysis challenges</h2>
+      <div style="display:flex; gap:18px; align-items:center;">
+        <div style="flex:1;">
+          <ul style="font-size:0.92em;">
+            <li>Millions of <strong>overlapping</strong> sources</li>
+            <li>Unknown <strong>number</strong> of sources</li>
+            <li>Hierarchical model structure</li>
+            <li>Non-stationary, non-Gaussian noise</li>
+            <li>Data gaps and local disturbances</li>
+            <li>Time-varying instrument response</li>
+            <li>Complex signals with higher harmonics</li>
+            <li>Stochastic signals and signal confusion</li>
+            <li>Potential laser noise leakage</li>
+            <li>Significant signal-model uncertainties</li>
+          </ul>
+        </div>
+        <div style="flex:1.1; text-align:center;">
+          <img src="img/p09_01.png" style="width:100%; max-width:560px;">
+          <p style="font-size:0.65em; color:#7f8c8d; margin-top:4px;">Slide &amp; image credits: N. Cornish (LISA Nice 2023)</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 10 — Global fit -->
+    
+
+<section>
+      <p class="eyebrow">Motivation &gt; Enter AI</p>
+      <h2>Artificial Intelligence to the rescue?</h2>
+      <div style="display:flex; gap:16px; align-items:center;">
+        <div style="flex:0.85; display:flex; flex-direction:column; align-items:center;">
+          <p style="font-weight:700; margin:40px 0 8px; font-size:0.95em;">ChatGPT o1 benchmarks (2024)</p>
+          <p>Excelling at PhD-level questions</p>
+          <img src="img/p13b_gpqa.png" style="width:100%; max-width:360px;">
+        </div>
+        <div style="flex:1.5; text-align:center;">
+          <img src="img/p13b_nist.png" style="width:100%;">
+      <p style="font-size:0.65em; color:#7f8c8d; text-align:right; margin-top:6px;">Source: <a href="https://www.nist.gov/news-events/news/2026/05/caisi-evaluation-deepseek-v4-pro" style="color:#2980b9;">U.S. Center for AI Standards and Innovation (NIST), 2026</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 2                                                    -->
+    <!-- ============================================================ -->
+    
+
+<section class="section-slide">
+      <div class="stack">
+        <div class="grad-bar"></div>
+        <h1>Simulation-based inference</h1>
+        <p>Using interpretative and generative AI to perform complex scientific analyses</p>
+        <div class="grad-bar below"></div>
+      </div>
+    </section>
+
+    <!-- SLIDE: Simulation vs. inference — two directions             -->
+    <!-- (copied from lecture1b.html)                                 -->
+    
+
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; The inverse problem</p>
+      <h2>Forward simulation and the inverse problem</h2>
+
+      <div style="display:flex; align-items:center; justify-content:center; gap:0; margin:40px 0 30px; position:relative;">
+
+        <!-- Left: parameters -->
+        <div style="flex:0 0 200px; text-align:center;">
+          <div style="padding:20px 10px; background:#eaf2f8; border:2px solid #2980b9; border-radius:12px;">
+            <div style="font-size:1.6em; color:#2c3e50;">\(\boldsymbol\theta\)</div>
+            <div style="margin-top:6px; font-size:0.9em; color:#7f8c8d;">parameters<br><em>what we care about</em></div>
+            <div style="margin-top:8px; font-size:0.85em; color:#2980b9;">e.g. \(H_0,\; \Omega_m,\)<br>BH masses, lens profile</div>
+          </div>
+        </div>
+
+        <!-- Middle: simulator + arrows -->
+        <div style="flex:1; position:relative; padding:0 14px;">
+          <!-- Forward arrow (top) -->
+          <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
+            <span style="flex:1; height:2px; background:#27ae60;"></span>
+            <div style="padding:8px 14px; background:#eafaf1; border:2px solid #27ae60; border-radius:8px; font-size:0.9em; white-space:nowrap;">
+              <strong style="color:#27ae60;">Simulator</strong> \(p(\mathbf{x}\mid\boldsymbol\theta)\)
+            </div>
+            <span style="flex:1; height:2px; background:#27ae60; position:relative;">
+              <span style="position:absolute; right:-2px; top:-6px; border-left:10px solid #27ae60; border-top:7px solid transparent; border-bottom:7px solid transparent;"></span>
+            </span>
+          </div>
+          <p style="text-align:center; margin:6px 0 0 0; color:#27ae60; font-size:0.9em;"><em>forward &mdash; physics knowledge and assumptions</em></p>
+
+          <!-- Spacer -->
+          <div style="height:36px;"></div>
+
+          <!-- Inverse arrow (bottom) -->
+          <div class="fragment" style="display:flex; align-items:center; justify-content:center; gap:10px;">
+            <span style="flex:1; height:2px; background:#e67e22; position:relative;">
+              <span style="position:absolute; left:-2px; top:-6px; border-right:10px solid #e67e22; border-top:7px solid transparent; border-bottom:7px solid transparent;"></span>
+            </span>
+            <div style="padding:8px 14px; background:#fdf6ec; border:2px solid #e67e22; border-radius:8px; font-size:0.9em; white-space:nowrap;">
+              <strong style="color:#e67e22;">Inference</strong> \(p(\boldsymbol\theta\mid\mathbf{x})\)
+            </div>
+            <span style="flex:1; height:2px; background:#e67e22;"></span>
+          </div>
+          <p class="fragment" style="text-align:center; margin:6px 0 0 0; color:#e67e22; font-size:0.9em;"><em>inverse &mdash; generating insights</em></p>
+        </div>
+
+        <!-- Right: data -->
+        <div style="flex:0 0 200px; text-align:center;">
+          <div style="padding:20px 10px; background:#fdedec; border:2px solid #e74c3c; border-radius:12px;">
+            <div style="font-size:1.6em; color:#2c3e50;">\(\mathbf{x}\)</div>
+            <div style="margin-top:6px; font-size:0.9em; color:#7f8c8d;">data<br><em>what we observe</em></div>
+            <div style="margin-top:8px; font-size:0.85em; color:#e74c3c;">images, time-series,<br>power spectra, &hellip;</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- SLIDE: The inference problem — formally                      -->
+    <!-- (lifted from old/lecture6.html)                              -->
+    <!-- ============================================================ -->
+    
+
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; Bayesian inference</p>
+      <h2>The inverse problem &mdash; formally</h2>
+      <p class="subtitle" style="margin-top:0;">
+        Bayesian inference provides a rule for updating our prior knowledge about parameter $\theta$ given new data $x$.
+      </p>
+
+      <div class="box box-blue" style="text-align:center; font-size:1.1em;">
+        \[ p(\boldsymbol\theta \mid \mathbf{x}) \;=\; \frac{p(\mathbf{x}\mid\boldsymbol\theta)\,
+        p(\boldsymbol\theta)}{p(\mathbf{x})} \]
+      </div>
+      <ul style="font-size:1.0em;">
+        <li><strong>Prior</strong> \(p(\boldsymbol\theta)\): what we believed before seeing data.</li>
+        <li><strong>Likelihood</strong> \(p(\mathbf{x}\mid\boldsymbol\theta)\): what the physics model predicts.</li>
+        <li><strong>Posterior</strong> \(p(\boldsymbol\theta\mid\mathbf{x})\): what we want.</li>
+        <li><strong>Evidence / Marginal likelihood</strong> \(p(\mathbf{x}) = \int p(\mathbf{x}\mid\boldsymbol\theta)\,
+          p(\boldsymbol\theta)\, d\boldsymbol\theta\).</li>
+      </ul>
+      <p style="margin-top:22px; padding-top:10px; border-top:1px solid #ecf0f1; color:#7f8c8d; font-size:0.82em;">
+        <em>Note.</em> SBI only requires <strong>samples</strong> from \(p(\mathbf{x}\mid\boldsymbol\theta)\) &mdash; i.e. a
+        running simulator. Likelihood-based methods (MCMC, HMC, VI) need <em>pointwise evaluations</em> of
+        \(p(\mathbf{x}\mid\boldsymbol\theta)\), which are often unavailable when detector effects or systematics must be
+        marginalised (= integrated) out.
+      </p>
+    </section>
+
+
+    <!-- SBI: freedom to model the world (PDF p24) -->
+    
+
+<section>
+      <style>
+        .nt-wrap{ --sym:#27ae60; --lik:#e6a817; --sbi:#e74c3c; }
+        .nt-spine{ text-align:center; color:#34495e; font-size:0.72em; margin:2px 0 14px; }
+        .nt-spine b{ color:#2c3e50; }
+        .nt-cols{ display:flex; gap:18px; align-items:stretch; justify-content:center; }
+        .nt-col{ flex:1; display:flex; flex-direction:column; border-radius:14px;
+                 border:2px solid var(--c); background:var(--bg); overflow:hidden; }
+        .nt-col.sym{ --c:var(--sym); --bg:#eaf7ef; }
+        .nt-col.lik{ --c:var(--lik); --bg:#fdf6e3; }
+        .nt-col.sbi{ --c:var(--sbi); --bg:#fdecea; }
+        .nt-head{ background:var(--c); color:#fff; font-family:'Space Grotesk',sans-serif;
+                  font-weight:700; font-size:0.66em; padding:8px 12px; }
+        .nt-body{ flex:1; display:flex; flex-direction:column; align-items:center;
+                  gap:7px; padding:14px 12px 8px; font-size:0.66em; }
+        .nt-lbl{ color:#7f8c8d; font-size:0.82em; text-transform:uppercase; letter-spacing:0.04em; }
+        .nt-model{ display:flex; flex-direction:column; gap:6px; align-items:center; }
+        .nt-row{ display:flex; align-items:center; gap:8px; }
+        .nt-box{ border:1.5px solid var(--c); background:#fff; border-radius:6px;
+                 padding:2px 10px; font-weight:600; color:#2c3e50; min-width:62px; text-align:center; }
+        .nt-step{ color:var(--c); font-weight:600; text-align:center; line-height:1.15; }
+        .nt-step .arr{ font-size:1.5em; display:block; }
+        .nt-rep{ margin-top:4px; text-align:center; color:#2c3e50; }
+        .nt-foot{ border-top:1.5px dashed var(--c); padding:9px 12px; font-size:0.62em;
+                  color:#566; line-height:1.3; min-height:62px; }
+        .nt-foot b{ color:#2c3e50; }
+        .nt-icon{ width:150px; height:auto; }
+        .nt-net{ width:195px; }
+        .nt-reel[data-reel="0"]{ cursor:pointer; }
+        /* slot reels (symbolic) */
+        .nt-reel{ display:inline-block; vertical-align:middle; overflow:hidden; box-sizing:content-box;
+                  height:1.5em; line-height:1.5em; padding-top:0; padding-bottom:0;
+                  white-space:nowrap; text-align:center; }
+        .nt-reel .nt-strip{ display:flex; flex-direction:column; }
+        .nt-reel .nt-strip > span{ display:block; height:1.5em; line-height:1.5em; }
+        .nt-box.locked{ box-shadow:0 0 0 2px var(--c); background:#eafaf0; }
+        .nt-box.flash{ animation:ntflash .65s ease; }
+        @keyframes ntflash{ 35%{ background:#c8f2d8; box-shadow:0 0 12px 3px rgba(39,174,96,.6); } }
+        /* loss sparkline (sbi) */
+        .nt-loss{ width:150px; height:40px; }
+        .nt-epoch{ font-size:0.78em; color:#7f8c8d; margin-top:-2px; font-variant-numeric:tabular-nums; }
+      </style>
+      <p class="eyebrow">Foundations of SBI &gt; A short history</p>
+      <h2>Bayesian inference in practice</h2>
+      <p class="nt-spine">We always want the posterior <b>\(p(\boldsymbol\theta\mid\mathbf{x})\)</b>;
+         only its <b>representation</b> changes: &nbsp;formula &rarr; samples &rarr; network.</p>
+
+      <div class="nt-wrap">
+        <div class="nt-cols">
+
+          <!-- ===== Symbolic / analytic ===== -->
+          <div class="nt-col sym fragment" data-anim="sym">
+            <div class="nt-head">Symbolic inference</div>
+            <div class="nt-body">
+              <div class="nt-lbl">closed-form model</div>
+              <div class="nt-model">
+                <div class="nt-row"><span class="nt-box nt-reel" data-reel="0">Normal</span><span>\(p(\mathbf{x}\mid\boldsymbol\theta)\)</span></div>
+                <div class="nt-row"><span class="nt-box nt-reel" data-reel="1">Normal</span><span>\(p(\boldsymbol\theta)\)</span></div>
+              </div>
+              <div class="nt-step"><span class="arr">&darr;</span>symbolic algebra,<br>conjugate priors</div>
+              <div class="nt-row"><span class="nt-box nt-reel nt-result" data-reel="2">Normal</span><span>\(p(\boldsymbol\theta\mid\mathbf{x})\)</span></div>
+              <div class="nt-rep">\(q(\boldsymbol\theta\mid\mathbf{x})\) is <b>analytic &amp; exact</b></div>
+            </div>
+            <div class="nt-foot"><b>Bayes 1763 &middot; Gauss &amp; Laplace ~1800 &middot; conjugate priors 1961.</b>
+              Exact but rigid: needs closed-form models and a prior matched to the likelihood.</div>
+          </div>
+
+          <!-- ===== Likelihood-based / sampled ===== -->
+          <div class="nt-col lik fragment" data-anim="lik">
+            <div class="nt-head">Likelihood-based inference</div>
+            <div class="nt-body">
+              <div class="nt-lbl">explicit model</div>
+              <div class="nt-rep">\(L(\boldsymbol\theta)\equiv p(\mathbf{x}_o\mid\boldsymbol\theta)\,p(\boldsymbol\theta)\)</div>
+              <div class="nt-step"><span class="arr">&darr;</span>sampling /<br>optimisation</div>
+              <svg class="nt-icon" viewBox="0 0 160 92" xmlns="http://www.w3.org/2000/svg">
+                <g class="nt-bars" fill="#e6a817" opacity="0.55">
+                  <rect x="22" y="58" width="13" height="22"/>
+                  <rect x="37" y="44" width="13" height="36"/>
+                  <rect x="52" y="27" width="13" height="53"/>
+                  <rect x="67" y="18" width="13" height="62"/>
+                  <rect x="82" y="26" width="13" height="54"/>
+                  <rect x="97" y="42" width="13" height="38"/>
+                  <rect x="112" y="56" width="13" height="24"/>
+                </g>
+                <path class="nt-curve" d="M16,72 C42,72 56,20 80,15 C104,20 118,72 144,72" fill="none" stroke="#b9860b" stroke-width="2.5"/>
+                <line x1="14" y1="80" x2="146" y2="80" stroke="#999" stroke-width="1.5"/>
+              </svg>
+              <div class="nt-rep">\(q(\boldsymbol\theta\mid\mathbf{x})\) is <b>sampled / fitted</b></div>
+            </div>
+            <div class="nt-foot"><b>Metropolis 1953 &middot; Hastings 1970 &middot; Gibbs 1984 &middot; VI 1990s.</b>
+              Flexible model, free prior, explored numerically (MCMC, VI), but still needs an evaluable likelihood.</div>
+          </div>
+
+          <!-- ===== SBI / learned ===== -->
+          <div class="nt-col sbi fragment" data-anim="sbi">
+            <div class="nt-head">Simulation-based inference</div>
+            <div class="nt-body">
+              <div class="nt-lbl">implicit model</div>
+              <div class="nt-rep">\(\boldsymbol\theta,\mathbf{x}\sim p(\mathbf{x}\mid\boldsymbol\theta)\,p(\boldsymbol\theta)\)</div>
+              <div class="nt-step"><span class="arr">&darr;</span>training</div>
+              <svg class="nt-icon nt-net" viewBox="0 0 224 100" xmlns="http://www.w3.org/2000/svg">
+                <g class="nt-edges" stroke="#e7a9a2" stroke-width="1">
+                  <!-- x (top) -> summary (pinch) -->
+                  <line x1="24" y1="16" x2="76" y2="48"/><line x1="24" y1="16" x2="96" y2="48"/>
+                  <line x1="54" y1="16" x2="76" y2="48"/><line x1="54" y1="16" x2="96" y2="48"/>
+                  <line x1="86" y1="16" x2="76" y2="48"/><line x1="86" y1="16" x2="96" y2="48"/>
+                  <line x1="118" y1="16" x2="76" y2="48"/><line x1="118" y1="16" x2="96" y2="48"/>
+                  <line x1="148" y1="16" x2="76" y2="48"/><line x1="148" y1="16" x2="96" y2="48"/>
+                  <!-- summary -> theta (bottom) -->
+                  <line x1="76" y1="48" x2="58" y2="80"/><line x1="76" y1="48" x2="86" y2="80"/><line x1="76" y1="48" x2="114" y2="80"/>
+                  <line x1="96" y1="48" x2="58" y2="80"/><line x1="96" y1="48" x2="86" y2="80"/><line x1="96" y1="48" x2="114" y2="80"/>
+                </g>
+                <g fill="#e74c3c">
+                  <circle cx="24" cy="16" r="4"/><circle cx="54" cy="16" r="4"/><circle cx="86" cy="16" r="4"/><circle cx="118" cy="16" r="4"/><circle cx="148" cy="16" r="4"/>
+                  <circle cx="76" cy="48" r="4.5"/><circle cx="96" cy="48" r="4.5"/>
+                  <circle cx="58" cy="80" r="4"/><circle cx="86" cy="80" r="4"/><circle cx="114" cy="80" r="4"/>
+                </g>
+                <line x1="98" y1="48" x2="146" y2="50" stroke="#d0d0d0" stroke-width="1"/>
+                <text x="2" y="24" font-size="22" fill="#2c3e50" font-style="italic">x</text>
+                <text x="150" y="54" font-size="12" fill="#566">s (summary)</text>
+                <text x="2" y="92" font-size="22" fill="#2c3e50" font-style="italic">&theta;</text>
+              </svg>
+              <svg class="nt-loss" viewBox="0 0 150 40" xmlns="http://www.w3.org/2000/svg">
+                <line x1="8" y1="34" x2="142" y2="34" stroke="#ccc" stroke-width="1"/>
+                <polyline class="nt-lossline" points="" fill="none" stroke="#e74c3c" stroke-width="2"/>
+              </svg>
+              <div class="nt-epoch">epoch 0 &middot; loss 1.00</div>
+              <div class="nt-rep">\(q_\phi(\boldsymbol\theta\mid\mathbf{x})\) <b>is a neural network</b></div>
+            </div>
+            <div class="nt-foot"><b>ABC 1999 &middot; neural posterior / ratio estimation 2016+.</b>
+              Approximate but free: an embedding + density net learned from a simulator. The model can be anything you can simulate.</div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <script>
+    /* Animations for the "now and then" SBI slide. Triggered per column on
+       reveal.js fragmentshown; each re-runs on every reveal so it replays. */
+    (function(){
+      function whenReady(cb){
+        if (window.Reveal && Reveal.on) cb();
+        else window.addEventListener('load', function(){ if (window.Reveal && Reveal.on) cb(); });
+      }
+      function seedRNG(){ return createRNG(((Date.now()>>>0) ^ Math.floor(Math.random()*1e9)) | 1); }
+      var DISTS = ['Normal','Beta','Gamma','Poisson','Binomial','Cauchy','Exponential','Dirichlet','Multinomial','Student-t'];
+      // conjugate triples: [ likelihood p(x|θ), prior p(θ), posterior p(θ|x) ]
+      var COMBOS = [
+        ['Normal','Normal','Normal'],
+        ['Binomial','Beta','Beta'],
+        ['Poisson','Gamma','Gamma'],
+        ['Exponential','Gamma','Gamma'],
+        ['Multinomial','Dirichlet','Dirichlet'],
+        ['Geometric','Beta','Beta']
+      ];
+
+      // --- Symbolic: slot-machine reels landing on a conjugate match -------
+      function animateSymbolic(col, comboIdx){
+        var combo = COMBOS[(((comboIdx||0)%COMBOS.length)+COMBOS.length)%COMBOS.length];
+        var reels = col.querySelectorAll('.nt-reel');
+        var slowest = null, slowestDur = 0;
+        reels.forEach(function(reel, idx){
+          var rng = seedRNG();
+          var count = 16 + idx*7;
+          var landing = combo[idx] || 'Normal';
+          var html = '<span class="nt-strip">';
+          for (var i=0;i<count-1;i++) html += '<span>'+DISTS[Math.floor(rng()*DISTS.length)]+'</span>';
+          html += '<span>'+landing+'</span></span>';
+          reel.classList.remove('locked','flash');
+          reel.innerHTML = html;
+          var strip = reel.querySelector('.nt-strip');
+          var items = strip.children;
+          reel.style.height = items[0].offsetHeight + 'px';   // window == exactly one item
+          var dist = items[items.length-1].offsetTop - items[0].offsetTop; // exact, no accumulation
+          strip.style.transition = 'none';
+          strip.style.transform = 'translateY(0)';
+          void strip.offsetHeight; // reflow
+          var dur = 1.0 + idx*0.55;
+          if (dur > slowestDur){ slowestDur = dur; slowest = strip; }
+          requestAnimationFrame(function(){
+            strip.style.transition = 'transform '+dur+'s cubic-bezier(.13,.7,.2,1)';
+            strip.style.transform = 'translateY(-'+dist+'px)';
+          });
+        });
+        var result = col.querySelector('.nt-result');
+        if (slowest && result){
+          var fired = false;
+          slowest.addEventListener('transitionend', function(){
+            if (fired) return; fired = true;
+            result.classList.add('locked','flash');
+          });
+        }
+      }
+
+      // --- Likelihood: histogram building up from samples ------------------
+      function animateSamples(col){
+        var svg = col.querySelector('svg.nt-icon'); if (!svg) return;
+        var group = svg.querySelector('.nt-bars');
+        var curve = svg.querySelector('.nt-curve');
+        var SVGNS = 'http://www.w3.org/2000/svg';
+        var n = 14, x0 = 16, x1 = 146, slot = (x1-x0)/n, barW = slot*0.78;
+        var baseY = 80, maxH = 62, rng = seedRNG();
+        // rebuild histogram with 2x the bins
+        while (group.firstChild) group.removeChild(group.firstChild);
+        var bars = [];
+        for (var i=0;i<n;i++){
+          var r = document.createElementNS(SVGNS,'rect');
+          r.setAttribute('x', (x0 + i*slot + (slot-barW)/2).toFixed(2));
+          r.setAttribute('width', barW.toFixed(2));
+          r.setAttribute('y', baseY); r.setAttribute('height', 0);
+          group.appendChild(r); bars.push(r);
+        }
+        if (curve) curve.style.opacity = 0;
+        var counts = new Array(n).fill(0), F = 600, f = 0;
+        (function step(){
+          f++; var p = f/F;
+          for (var s=0;s<3;s++){
+            var bin = Math.round((n-1)/2 + gaussN(rng)*3);
+            if (bin<0) bin=0; if (bin>n-1) bin=n-1;
+            counts[bin]++;
+          }
+          var mx = Math.max.apply(null, counts) || 1;
+          for (var j=0;j<n;j++){
+            var h = counts[j]/mx*maxH;
+            bars[j].setAttribute('height', h.toFixed(2));
+            bars[j].setAttribute('y', (baseY-h).toFixed(2));
+          }
+          if (curve && p>0.7) curve.style.opacity = Math.min(1,(p-0.7)/0.3);
+          if (f<F) requestAnimationFrame(step);
+        })();
+      }
+
+      // --- SBI: network training with flowing edges + loss curve -----------
+      function animateNetwork(col){
+        var svg = col.querySelector('svg.nt-net'); if (!svg) return;
+        var edges = svg.querySelectorAll('.nt-edges line');
+        var rng = seedRNG(), targets = [];
+        edges.forEach(function(){ targets.push(0.7 + rng()*2.1); });
+        edges.forEach(function(e){ e.style.strokeDasharray = '6 4'; });
+        var lossLine = col.querySelector('.nt-lossline');
+        var epoch = col.querySelector('.nt-epoch');
+        var pts = [], LX0=8, LX1=142, LY0=6, LY1=34, off=0, F=360, f=0;
+        function lerpC(p){
+          var a=[207,216,220], b=[231,76,60];
+          return 'rgb('+Math.round(a[0]+(b[0]-a[0])*p)+','+Math.round(a[1]+(b[1]-a[1])*p)+','+Math.round(a[2]+(b[2]-a[2])*p)+')';
+        }
+        (function step(){
+          f++; var p = f/F; off -= 1.6;
+          var c = lerpC(p);
+          edges.forEach(function(e,i){
+            var noise = (1-p)*(rng()-0.5)*2.4;
+            var w = targets[i]*(0.35+0.65*p) + noise; if (w<0.25) w=0.25;
+            e.setAttribute('stroke-width', w.toFixed(2));
+            e.setAttribute('stroke', c);
+            e.style.opacity = (0.3+0.7*p).toFixed(2);
+            if (p<1) e.style.strokeDashoffset = off;
+          });
+          var L = Math.exp(-3.3*p)*(1+(1-p)*0.22*(rng()-0.5)*2);
+          if (L<0) L=0; if (L>1) L=1;
+          var x = LX0+(LX1-LX0)*p, y = LY0+(1-L)*(LY1-LY0);
+          pts.push(x.toFixed(1)+','+y.toFixed(1));
+          if (lossLine) lossLine.setAttribute('points', pts.join(' '));
+          if (epoch) epoch.textContent = 'epoch '+Math.round(p*60)+'  ·  loss '+L.toFixed(2);
+          if (f<F) requestAnimationFrame(step);
+          else edges.forEach(function(e){ e.style.strokeDasharray = 'none'; });
+        })();
+      }
+
+      whenReady(function(){
+        // Click the likelihood reel to cycle through known conjugate pairs.
+        var symCol = document.querySelector('.nt-col.sym');
+        if (symCol){
+          var likReel = symCol.querySelector('.nt-reel[data-reel="0"]');
+          if (likReel){
+            likReel.title = 'Click for another conjugate prior / likelihood pair';
+            likReel.addEventListener('click', function(e){
+              e.stopPropagation();
+              var idx = parseInt(symCol.dataset.combo || '0', 10) + 1;
+              symCol.dataset.combo = idx;
+              animateSymbolic(symCol, idx);
+            });
+          }
+        }
+        Reveal.on('fragmentshown', function(ev){
+          var f = ev.fragment; if (!f || !f.dataset) return;
+          if (f.dataset.anim === 'sym'){ f.dataset.combo = '0'; animateSymbolic(f, 0); }
+          else if (f.dataset.anim === 'lik') animateSamples(f);
+          else if (f.dataset.anim === 'sbi') animateNetwork(f);
+        });
+      });
+    })();
+    </script>
+
+
+    <!-- ============================================================ -->
+    <!-- What is a neural network? — concept (computation + graph)     -->
+    <!-- ============================================================ -->
+    
+
+<section id="nn-concept-slide">
+      <style>
+        .nn-wrap{ --in:#2980b9; --hid:#7f8c8d; --out:#e74c3c; }
+        .nn-lbl{ color:#7f8c8d; font-size:0.62em; text-transform:uppercase;
+                 letter-spacing:0.12em; font-family:'Space Grotesk',sans-serif;
+                 font-weight:600; margin:0 0 4px; }
+        .nn-cols{ display:flex; gap:26px; align-items:stretch; margin-top:6px; }
+        .nn-col{ flex:1; display:flex; flex-direction:column; }
+        .nn-card{ border:1.5px solid #e1e6ea; border-radius:12px; background:#fafbfc;
+                  padding:12px 16px; flex:1; }
+        .nn-eq{ font-size:0.9em; line-height:1.7; color:#2c3e50; text-align:center; }
+        .nn-note{ font-size:0.62em; color:#7f8c8d; margin-top:8px; line-height:1.35; }
+        .nn-note b{ color:#2c3e50; }
+        .nn-cg text{ font-family:'Inter',sans-serif; }
+        /* live-training slide */
+        .nn-t-cols{ display:flex; gap:22px; align-items:stretch; margin-top:4px; }
+        .nn-t-left{ flex:1.25; display:flex; flex-direction:column; gap:8px; }
+        .nn-t-right{ flex:1; display:flex; flex-direction:column; gap:10px; }
+        .nn-stat{ display:flex; gap:18px; font-size:0.72em; color:#2c3e50;
+                  font-variant-numeric:tabular-nums; flex-wrap:wrap; align-items:baseline; }
+        .nn-stat .k{ color:#7f8c8d; font-size:0.82em; }
+        .nn-stat b{ font-family:'Space Grotesk',sans-serif; }
+        .nn-callout{ border-left:4px solid #e74c3c; background:#fdecea; border-radius:10px;
+                     padding:10px 14px; font-size:0.66em; color:#2c3e50; line-height:1.4; }
+        .nn-callout b{ color:#c0392b; }
+        .nn-ex{ border:1.5px solid #e1e6ea; border-radius:12px; background:#fafbfc;
+                padding:10px 14px; font-size:0.66em; }
+        .nn-ex .sum{ font-size:1.15em; color:#2c3e50; margin-bottom:6px; font-variant-numeric:tabular-nums; }
+        .nn-ex .sum b{ font-family:'Space Grotesk',sans-serif; }
+        .nn-bits{ display:flex; gap:4px; margin:4px 0; }
+        .nn-bit{ width:22px; height:26px; border-radius:5px; display:flex; align-items:center;
+                 justify-content:center; font-weight:700; font-size:0.95em; color:#fff;
+                 font-variant-numeric:tabular-nums; }
+        .nn-bit.ok{ background:#27ae60; } .nn-bit.bad{ background:#e74c3c; }
+        .nn-bitrow-lbl{ font-size:0.78em; color:#7f8c8d; width:62px; display:inline-block; }
+        .nn-tag{ display:inline-block; padding:1px 9px; border-radius:20px; font-size:0.82em;
+                 font-weight:700; font-family:'Space Grotesk',sans-serif; }
+        .nn-tag.ok{ background:#27ae60; color:#fff; } .nn-tag.bad{ background:#e74c3c; color:#fff; }
+        .nn-canvas-wrap{ border:1.5px solid #e1e6ea; border-radius:12px; background:#fff; padding:8px; }
+        .nn-legend{ display:flex; gap:16px; font-size:0.62em; color:#566; margin-top:2px; }
+        .nn-legend i{ display:inline-block; width:18px; height:0; vertical-align:middle;
+                      border-top-width:3px; margin-right:5px; }
+      </style>
+
+      <p class="eyebrow">Foundations of SBI &gt; Neural networks</p>
+      <h2>What is a neural network?</h2>
+      <p class="subtitle" style="margin-top:0;">Two views of one object: a <b>computation</b>, and a <b>graph</b>. The weights in the formulas <em>are</em> the connections.</p>
+
+      <div class="nn-wrap">
+        <div class="nn-cols">
+
+          <!-- ===== As a computation ===== -->
+          <div class="nn-col">
+            <p class="nn-lbl">1 &middot; As a computation</p>
+            <div class="nn-card">
+              <!-- computational graph -->
+              <svg viewBox="0 0 560 120" class="nn-cg" style="width:100%; height:auto; margin-bottom:6px;">
+                <defs>
+                  <marker id="nnArr" markerWidth="9" markerHeight="9" refX="7" refY="3"
+                          orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L7,3 L0,6 Z" fill="#7f8c8d"/>
+                  </marker>
+                </defs>
+                <g font-size="17" fill="#2c3e50" text-anchor="middle">
+                  <rect x="12"  y="40" width="80" height="40" rx="8" fill="#eaf2fb" stroke="#2980b9" stroke-width="1.5"/>
+                  <text x="52" y="58" font-style="italic">x</text><text x="52" y="73" font-size="12" fill="#7f8c8d">input &#8712; &#8477;&#185;&#8308;</text>
+                  <rect x="124" y="40" width="80" height="40" rx="8" fill="#f3f4f6" stroke="#7f8c8d" stroke-width="1.5"/>
+                  <text x="164" y="58" font-style="italic">h&#8321;</text><text x="164" y="73" font-size="12" fill="#7f8c8d">&#8712; &#8477;&#8310;&#8308;</text>
+                  <rect x="236" y="40" width="80" height="40" rx="8" fill="#f3f4f6" stroke="#7f8c8d" stroke-width="1.5"/>
+                  <text x="276" y="58" font-style="italic">h&#8322;</text><text x="276" y="73" font-size="12" fill="#7f8c8d">&#8712; &#8477;&#8310;&#8308;</text>
+                  <rect x="348" y="40" width="80" height="40" rx="8" fill="#f3f4f6" stroke="#7f8c8d" stroke-width="1.5"/>
+                  <text x="388" y="58" font-style="italic">h&#8323;</text><text x="388" y="73" font-size="12" fill="#7f8c8d">&#8712; &#8477;&#8310;&#8308;</text>
+                  <rect x="460" y="40" width="80" height="40" rx="8" fill="#fdecea" stroke="#e74c3c" stroke-width="1.5"/>
+                  <text x="500" y="58" font-style="italic">&#375;</text><text x="500" y="73" font-size="12" fill="#7f8c8d">out &#8712; &#8477;&#8312;</text>
+                </g>
+                <g stroke="#7f8c8d" stroke-width="2" marker-end="url(#nnArr)">
+                  <line x1="92"  y1="60" x2="122" y2="60"/>
+                  <line x1="204" y1="60" x2="234" y2="60"/>
+                  <line x1="316" y1="60" x2="346" y2="60"/>
+                  <line x1="428" y1="60" x2="458" y2="60"/>
+                </g>
+                <g font-size="12.5" fill="#34495e" text-anchor="middle" font-style="italic">
+                  <text x="107" y="32">W&#8321;,&#966;</text>
+                  <text x="219" y="32">W&#8322;,&#966;</text>
+                  <text x="332" y="32">W&#8323;,&#966;</text>
+                  <text x="444" y="32">W&#8324;,&#963;</text>
+                </g>
+              </svg>
+              <div class="nn-eq">
+                \( \mathbf{h}_1 = \varphi(W_1\,\mathbf{x} + \mathbf{b}_1) \)<br>
+                \( \mathbf{h}_2 = \varphi(W_2\,\mathbf{h}_1 + \mathbf{b}_2) \)<br>
+                \( \mathbf{h}_3 = \varphi(W_3\,\mathbf{h}_2 + \mathbf{b}_3) \)<br>
+                \( \mathbf{y} = W_4\,\mathbf{h}_3 + \mathbf{b}_4 \)
+              </div>
+              <p class="nn-note">A stack of <b>affine maps</b> \(W\mathbf{h}+\mathbf{b}\) interleaved with a simple
+                <b>nonlinearity</b> \(\varphi\), e.g. \(\varphi(\cdot)=\max(0,\cdot)\). Nothing more: matrix multiplies and a squashing function.
+                The numbers in \(W,\mathbf{b}\) are <b>learned</b>.</p>
+            </div>
+          </div>
+
+          <!-- ===== As a network ===== -->
+          <div class="nn-col">
+            <p class="nn-lbl">2 &middot; As a network</p>
+            <div class="nn-card" style="display:flex; flex-direction:column; align-items:center;">
+              <svg id="nn-arch" viewBox="0 0 560 360" style="width:100%; height:auto;"></svg>
+              <p class="nn-note" style="text-align:center;">Each <b>node</b> is a unit applying \(\varphi\); each
+                <b>edge</b> carries one weight \(W_{ij}\). The matrices on the left are exactly these connections,
+                drawn out. <b>Layers</b> = the columns; <b>depth</b> = how many.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- A neural network learns to COMPUTE — live in-browser training -->
+    <!-- ============================================================ -->
+    
+
+<section id="nn-train-slide">
+      <p class="eyebrow">Foundations of SBI &gt; Neural networks</p>
+      <h2>A neural network learns to <em>compute</em> &mdash; not to memorise</h2>
+      <p class="subtitle" style="margin-top:0;">Task: add two 7-bit numbers. 14 input bits &rarr; the 8 bits of their sum. Trained live, in your browser.</p>
+
+      <div class="nn-t-cols">
+        <!-- left: loss curve + controls -->
+        <div class="nn-t-left">
+          <div class="nn-canvas-wrap">
+            <canvas id="nn-loss" style="width:100%; height:300px; display:block;"></canvas>
+          </div>
+          <div class="nn-legend">
+            <span><i style="border-top:3px solid #e74c3c;"></i>training loss</span>
+            <span><i style="border-top:3px dashed #2980b9;"></i>validation loss (held-out)</span>
+            <span style="color:#7f8c8d;">log scale</span>
+          </div>
+          <div class="nn-stat" id="nn-stat">
+            <span><span class="k">epoch</span> <b id="nn-ep">0</b></span>
+            <span><span class="k">train loss</span> <b id="nn-trl">&mdash;</b></span>
+            <span><span class="k">val loss</span> <b id="nn-val">&mdash;</b></span>
+            <span><span class="k">val exact-match</span> <b id="nn-acc" style="color:#27ae60;">&mdash;</b></span>
+          </div>
+          <div class="ctrl-row">
+            <button id="nn-run">&#9654; Train</button>
+            <button id="nn-reset">&#8635; Reset</button>
+            <span id="nn-status" style="color:#7f8c8d; font-size:0.9em;"></span>
+          </div>
+        </div>
+
+        <!-- right: generalization callout + held-out worked example -->
+        <div class="nn-t-right">
+          <div class="nn-callout">
+            16,384 possible input pairs. We train on just
+            <b id="nn-ntr">2,457</b> of them (<b>15%</b>) and test on the
+            <b id="nn-nva">13,927</b> the network <b>never sees</b>.
+            If it only memorised, it would fail on those. It doesn't.
+          </div>
+          <div class="nn-ex" id="nn-ex">
+            <div class="sum" id="nn-ex-sum">held-out example &mdash; <b>a + b</b></div>
+            <div class="nn-bitrow-lbl">network &rarr;</div>
+            <div class="nn-bits" id="nn-ex-pred"></div>
+            <div class="nn-bitrow-lbl">true sum</div>
+            <div class="nn-bits" id="nn-ex-true"></div>
+            <div style="margin-top:8px;">verdict: <span id="nn-ex-tag" class="nn-tag bad">untrained</span></div>
+            <p class="nn-note" style="margin-top:8px;">A pair it was <b>never trained on</b>. Green = the network got
+              that bit right. Watch the carries fall into place as it learns the <em>algorithm</em> of addition.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- One concept, many architectures                              -->
+    <!-- ============================================================ -->
+    
+
+<section id="nn-zoo-slide">
+      <style>
+        .arc-lead{ font-size:0.72em; color:#34495e; margin:2px 0 12px; line-height:1.4; }
+        .arc-lead b{ color:#2c3e50; }
+        .arc-list{ display:flex; flex-direction:column; gap:9px; }
+        .arc-row{ display:flex; align-items:center; gap:14px; border:1.5px solid #e1e6ea;
+                  border-left-width:5px; border-radius:10px; background:#fafbfc; padding:8px 14px; }
+        .arc-name{ flex:0 0 215px; font-family:'Space Grotesk',sans-serif; font-weight:700;
+                   font-size:0.78em; color:#2c3e50; line-height:1.15; }
+        .arc-name small{ display:block; font-family:'Inter',sans-serif; font-weight:400;
+                         font-size:0.78em; color:#7f8c8d; letter-spacing:0; }
+        .arc-map{ flex:0 0 150px; font-size:0.64em; color:#566; font-variant-numeric:tabular-nums; }
+        .arc-map code{ font-family:'Menlo',monospace; color:#2c3e50; font-size:0.95em; }
+        .arc-good{ flex:1; font-size:0.66em; color:#34495e; line-height:1.32; }
+        .arc-good b{ color:#2c3e50; }
+      </style>
+
+      <p class="eyebrow">Foundations of SBI &gt; Neural networks</p>
+      <h2>One concept, many architectures</h2>
+      <p class="arc-lead">The recipe never changes: a <b>stack of learned affine maps and nonlinearities</b>, fitted by
+        gradient descent. What changes is the <b>wiring</b> &mdash; the structure built in to match the data and the
+        mapping you want to learn (the <em>inductive bias</em>).</p>
+
+      <div class="arc-list">
+        <div class="arc-row" style="border-left-color:#2980b9;">
+          <div class="arc-name">MLP <small>fully connected</small></div>
+          <div class="arc-map"><code>vector &rarr; vector</code></div>
+          <div class="arc-good">No structure assumed &mdash; every input talks to every unit. The general-purpose baseline (our adder above). Flexible, but blind to geometry or order.</div>
+        </div>
+        <div class="arc-row" style="border-left-color:#27ae60;">
+          <div class="arc-name">CNN <small>convolutional</small></div>
+          <div class="arc-map"><code>image &rarr; label / value</code></div>
+          <div class="arc-good">Shared local filters + translation invariance. Built for data on a <b>grid</b>: images, spectrograms, sky maps.</div>
+        </div>
+        <div class="arc-row" style="border-left-color:#e67e22;">
+          <div class="arc-name">U-Net <small>encoder&ndash;decoder</small></div>
+          <div class="arc-map"><code>image &rarr; image</code></div>
+          <div class="arc-good">Down- then up-sampling with skip connections. <b>Dense field-to-field</b> maps: denoising, segmentation, simulation emulation.</div>
+        </div>
+        <div class="arc-row" style="border-left-color:#8e44ad;">
+          <div class="arc-name">Graph NN <small>message passing</small></div>
+          <div class="arc-map"><code>graph &rarr; graph / value</code></div>
+          <div class="arc-good">Operates on nodes and edges with permutation symmetry. <b>Irregular structure</b>: particle clouds, molecules, halos, meshes.</div>
+        </div>
+        <div class="arc-row" style="border-left-color:#e74c3c;">
+          <div class="arc-name">Transformer <small>attention</small></div>
+          <div class="arc-map"><code>set / sequence &rarr; &hellip;</code></div>
+          <div class="arc-good">Every element attends to every other, weighted by learned relevance. <b>Long-range relations</b>: language, time series, sets of detections.</div>
+        </div>
+      </div>
+
+      <p class="arc-lead" style="margin-top:12px; color:#7f8c8d; font-size:0.66em;">
+        Same training principle throughout &mdash; pick the architecture whose built-in symmetries match your problem.</p>
+    </section>
+
+    <script>
+    /* ===== "What is a neural network?" — architecture viz + live training =====
+       A from-scratch MLP (14-64-64-8, sigmoid out, BCE, Adam) trained in the
+       browser on 7-bit + 7-bit binary addition. Verified to reach ~99.7%
+       exact-match accuracy on held-out pairs from 15% of the data. */
+    (function(){
+      function whenReady(cb){
+        if (window.Reveal && Reveal.on) cb();
+        else window.addEventListener('load', function(){ if (window.Reveal && Reveal.on) cb(); });
+      }
+
+      // ---- 1. Architecture diagram (concept slide) ----------------------
+      function buildArch(){
+        var svg = document.getElementById('nn-arch');
+        if (!svg || svg.dataset.built) return;
+        var NS='http://www.w3.org/2000/svg';
+        var W=560, H=360;
+        var layers=[
+          {x:55,  n:14, shown:14, r:5,   col:'#2980b9'},
+          {x:172, n:64, shown:7,  r:6,   col:'#7f8c8d'},
+          {x:286, n:64, shown:7,  r:6,   col:'#7f8c8d'},
+          {x:400, n:64, shown:7,  r:6,   col:'#7f8c8d'},
+          {x:512, n:8,  shown:8,  r:6,   col:'#e74c3c'}
+        ];
+        function ys(count){
+          var top=34, bot=H-34, arr=[];
+          for(var i=0;i<count;i++) arr.push(count===1?(top+bot)/2: top + (bot-top)*i/(count-1));
+          return arr;
+        }
+        layers.forEach(function(L){ L.ys=ys(L.shown); });
+        function add(tag,attrs){ var e=document.createElementNS(NS,tag); for(var k in attrs) e.setAttribute(k,attrs[k]); svg.appendChild(e); return e; }
+        // edges
+        for(var l=0;l<layers.length-1;l++){
+          var A=layers[l], B=layers[l+1];
+          A.ys.forEach(function(ya){ B.ys.forEach(function(yb){
+            add('line',{x1:A.x,y1:ya,x2:B.x,y2:yb,stroke:'#c9d2da','stroke-width':0.6,opacity:0.55});
+          }); });
+        }
+        // nodes
+        layers.forEach(function(L){ L.ys.forEach(function(y){
+          add('circle',{cx:L.x,cy:y,r:L.r,fill:'#fff',stroke:L.col,'stroke-width':1.8});
+        }); });
+        // "more units" ellipses for hidden layers
+        [layers[1],layers[2],layers[3]].forEach(function(L){
+          add('text',{x:L.x,y:H-12,'text-anchor':'middle','font-size':16,fill:'#7f8c8d'}).textContent='⋮ 64';
+        });
+        // input-grouping bars: which 7 bits feed in as a, which as b
+        var IN=layers[0], pad=7;
+        function grpBar(i0,i1){
+          add('rect',{x:IN.x-22, y:IN.ys[i0]-pad, width:5, height:IN.ys[i1]-IN.ys[i0]+2*pad,
+                      rx:2.5, fill:IN.col, opacity:0.9});
+        }
+        grpBar(0,6); grpBar(7,13);
+        // bracket / layer labels (~30% larger)
+        function tx(x,y,s,o){ var t=add('text',{x:x,y:y,'font-size':14,fill:'#2c3e50','text-anchor':(o||'middle')}); t.textContent=s; return t; }
+        tx(55,18,'14 dim','middle');
+        tx(IN.x-28,(IN.ys[0]+IN.ys[6])/2+4,'a','end'); tx(IN.x-28,(IN.ys[7]+IN.ys[13])/2+4,'b','end');
+        tx(286,18,'3 hidden layers','middle');
+        tx(512,18,'8 dim','middle');
+        tx(540,layers[4].ys[0],'s₇','start'); tx(540,layers[4].ys[7],'s₀','start');
+        svg.dataset.built='1';
+      }
+
+      // ---- 2. MLP + training engine -------------------------------------
+      function createRNG(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; var t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+      var NIN=14, NOUT=8, SIZES=[14,64,64,64,8];
+      var rng=createRNG(20260617), randn=function(){ return Math.sqrt(-2*Math.log(rng()+1e-12))*Math.cos(2*Math.PI*rng()); };
+      function bits(n,w){ var b=new Array(w); for(var i=0;i<w;i++) b[i]=(n>>i)&1; return b; }
+      function ex(a,b){ return {a:a,b:b,x:bits(a,7).concat(bits(b,7)),y:bits(a+b,8)}; }
+
+      var ALL=[]; for(var a=0;a<128;a++) for(var b=0;b<128;b++) ALL.push([a,b]);
+      var TR, TR0, VA, TR_EVAL, VA_EVAL, EXMP;
+      function buildData(){
+        var sh=createRNG(777); var arr=ALL.slice();
+        for(var i=arr.length-1;i>0;i--){ var j=Math.floor(sh()*(i+1)); var t=arr[i];arr[i]=arr[j];arr[j]=t; }
+        var ntr=Math.floor(arr.length*0.15);
+        TR0=arr.slice(0,ntr).map(function(p){return ex(p[0],p[1]);}); // pristine canonical order
+        TR=TR0.slice();                                               // working copy (shuffled in place each epoch)
+        VA=arr.slice(ntr).map(function(p){return ex(p[0],p[1]);});
+        TR_EVAL=TR0.slice(0,512); VA_EVAL=VA.slice(0,512);
+        // pick a held-out example with several carries (large-ish sum)
+        EXMP=VA[0]; for(var k=0;k<60;k++){ if(VA[k].a+VA[k].b>EXMP.a+EXMP.b) EXMP=VA[k]; }
+        var f=function(x){ return x.toLocaleString('en-US'); };
+        document.getElementById('nn-ntr').textContent=f(TR.length);
+        document.getElementById('nn-nva').textContent=f(VA.length);
+      }
+
+      function layer(nin,nout){ var W=[],b=[],s=Math.sqrt(2/nin);
+        for(var i=0;i<nout;i++){ var r=new Array(nin); for(var j=0;j<nin;j++) r[j]=randn()*s; W.push(r); b.push(0); }
+        return {W:W,b:b,nin:nin,nout:nout,mW:W.map(function(r){return r.map(function(){return 0;});}),
+          vW:W.map(function(r){return r.map(function(){return 0;});}),mb:b.map(function(){return 0;}),vb:b.map(function(){return 0;})}; }
+      function makeNet(){ var L=[]; for(var i=0;i<SIZES.length-1;i++) L.push(layer(SIZES[i],SIZES[i+1])); return L; }
+      function forward(net,x){ var acts=[x],h=x;
+        for(var l=0;l<net.length;l++){ var L=net[l],out=new Array(L.nout),last=(l===net.length-1);
+          for(var i=0;i<L.nout;i++){ var s=L.b[i],Wi=L.W[i]; for(var j=0;j<L.nin;j++) s+=Wi[j]*h[j];
+            out[i]= last ? 1/(1+Math.exp(-s)) : (s>0?s:0); }
+          acts.push(out); h=out; }
+        return acts; }
+      function trainBatch(net,batch,lr,t){
+        var gW=net.map(function(L){return L.W.map(function(r){return r.map(function(){return 0;});});});
+        var gb=net.map(function(L){return L.b.map(function(){return 0;});});
+        for(var n=0;n<batch.length;n++){ var e=batch[n],acts=forward(net,e.x),yh=acts[acts.length-1],delta=new Array(NOUT);
+          for(var i=0;i<NOUT;i++) delta[i]=yh[i]-e.y[i];
+          for(var l=net.length-1;l>=0;l--){ var L=net[l],inp=acts[l];
+            for(var ii=0;ii<L.nout;ii++){ gb[l][ii]+=delta[ii]; var g=gW[l][ii]; for(var j=0;j<L.nin;j++) g[j]+=delta[ii]*inp[j]; }
+            if(l>0){ var nd=new Array(L.nin);
+              for(var j2=0;j2<L.nin;j2++){ var s=0; for(var i2=0;i2<L.nout;i2++) s+=L.W[i2][j2]*delta[i2]; nd[j2]= acts[l][j2]>0?s:0; }
+              delta=nd; } } }
+        var m=batch.length,b1=0.9,b2=0.999,eps=1e-8,c1=1-Math.pow(b1,t),c2=1-Math.pow(b2,t);
+        for(var l3=0;l3<net.length;l3++){ var L3=net[l3];
+          for(var i3=0;i3<L3.nout;i3++){ var g=gb[l3][i3]/m;
+            L3.mb[i3]=b1*L3.mb[i3]+(1-b1)*g; L3.vb[i3]=b2*L3.vb[i3]+(1-b2)*g*g;
+            L3.b[i3]-=lr*(L3.mb[i3]/c1)/(Math.sqrt(L3.vb[i3]/c2)+eps);
+            for(var j3=0;j3<L3.nin;j3++){ g=gW[l3][i3][j3]/m;
+              L3.mW[i3][j3]=b1*L3.mW[i3][j3]+(1-b1)*g; L3.vW[i3][j3]=b2*L3.vW[i3][j3]+(1-b2)*g*g;
+              L3.W[i3][j3]-=lr*(L3.mW[i3][j3]/c1)/(Math.sqrt(L3.vW[i3][j3]/c2)+eps); } } }
+      }
+      function evalSet(net,set){ var loss=0,exact=0;
+        for(var n=0;n<set.length;n++){ var e=set[n],yh=forward(net,e.x); yh=yh[yh.length-1]; var ok=true;
+          for(var i=0;i<NOUT;i++){ var p=Math.min(1-1e-7,Math.max(1e-7,yh[i]));
+            loss+=-(e.y[i]*Math.log(p)+(1-e.y[i])*Math.log(1-p)); if((p>0.5?1:0)!==e.y[i]) ok=false; }
+          if(ok) exact++; }
+        return {loss:loss/set.length, acc:exact/set.length}; }
+
+      // ---- 3. Loss plot (canvas) ----------------------------------------
+      var canvas, ctx, DPR=Math.min(2, window.devicePixelRatio||1);
+      function setupCanvas(){
+        canvas=document.getElementById('nn-loss'); if(!canvas) return;
+        var w=canvas.clientWidth||600, h=canvas.clientHeight||300;
+        canvas.width=w*DPR; canvas.height=h*DPR; ctx=canvas.getContext('2d'); ctx.setTransform(DPR,0,0,DPR,0,0);
+      }
+      var YMAX=5, YMIN=0.0002, WIN=180;   // WIN = epochs visible before the x-axis scrolls
+      function ly(v){ v=Math.max(YMIN,Math.min(YMAX,v)); return Math.log(v); }
+      function drawPlot(hist){
+        if(!ctx) return; var w=canvas.clientWidth, h=canvas.clientHeight;
+        var mL=42,mR=10,mT=12,mB=26, pw=w-mL-mR, ph=h-mT-mB;
+        ctx.clearRect(0,0,w,h);
+        ctx.font='10px Inter, sans-serif'; ctx.textBaseline='middle';
+        var l0=ly(YMIN), l1=ly(YMAX);
+        var emax = hist.length ? hist[hist.length-1].ep : 0;
+        var x1 = Math.max(WIN, emax), x0 = x1 - WIN;   // sliding window once emax exceeds WIN
+        function Y(v){ return mT+ph*(ly(v)-l1)/(l0-l1); }
+        function X(ep){ return mL+pw*(ep-x0)/WIN; }
+        // y grid (log decades)
+        ctx.strokeStyle='#eef1f4'; ctx.fillStyle='#9aa5ad'; ctx.lineWidth=1; ctx.textAlign='right';
+        [0.001,0.01,0.1,1].forEach(function(v){ var y=Y(v); ctx.beginPath(); ctx.moveTo(mL,y); ctx.lineTo(w-mR,y); ctx.stroke();
+          ctx.fillText(v.toString(), mL-6, y); });
+        // axes
+        ctx.strokeStyle='#cfd6dc'; ctx.beginPath(); ctx.moveTo(mL,mT); ctx.lineTo(mL,h-mB); ctx.lineTo(w-mR,h-mB); ctx.stroke();
+        // x-axis: window start / end + caption
+        ctx.fillStyle='#9aa5ad';
+        ctx.textAlign='left';   ctx.fillText(Math.round(x0).toString(), mL+1, h-9);
+        ctx.textAlign='right';  ctx.fillText(Math.round(x1).toString(), w-mR, h-9);
+        ctx.textAlign='center'; ctx.fillText('epoch', mL+pw/2, h-9);
+        if(!hist.length) return;
+        function line(key,color,dash){
+          ctx.strokeStyle=color; ctx.lineWidth=2; ctx.setLineDash(dash||[]);
+          ctx.beginPath(); var started=false;
+          hist.forEach(function(p){ if(p.ep<x0) return; var x=X(p.ep),y=Y(p[key]);
+            if(!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y); });
+          ctx.stroke(); ctx.setLineDash([]);
+        }
+        line('val','#2980b9',[5,4]);
+        line('tr','#e74c3c',[]);
+      }
+
+      // ---- 4. Run loop --------------------------------------------------
+      var net, hist=[], epoch=0, tstep=0, running=false, userPaused=false, BS=64, BPF=5;
+      function fmtPct(x){ return (x*100).toFixed(1)+'%'; }
+      function renderExample(){
+        var yh=forward(net,EXMP.x); yh=yh[yh.length-1];
+        var predEl=document.getElementById('nn-ex-pred'), trueEl=document.getElementById('nn-ex-true');
+        predEl.innerHTML=''; trueEl.innerHTML=''; var allok=true;
+        for(var i=NOUT-1;i>=0;i--){ var p=yh[i]>0.5?1:0, t=EXMP.y[i]; if(p!==t) allok=false;
+          var d=document.createElement('div'); d.className='nn-bit '+(p===t?'ok':'bad'); d.textContent=p; predEl.appendChild(d);
+          var d2=document.createElement('div'); d2.className='nn-bit'; d2.style.background='#bdc3c7'; d2.textContent=t; trueEl.appendChild(d2); }
+        document.getElementById('nn-ex-sum').innerHTML='held-out: <b>'+EXMP.a+' + '+EXMP.b+' = '+(EXMP.a+EXMP.b)+'</b>';
+        var tag=document.getElementById('nn-ex-tag');
+        if(epoch===0){ tag.className='nn-tag bad'; tag.textContent='untrained'; }
+        else if(allok){ tag.className='nn-tag ok'; tag.textContent='✓ exact'; }
+        else { tag.className='nn-tag bad'; tag.textContent='✗ wrong'; }
+      }
+      function logEval(full){
+        var T=evalSet(net,TR_EVAL), V=evalSet(net,VA_EVAL);
+        hist.push({ep:epoch, tr:T.loss, val:V.loss});
+        document.getElementById('nn-ep').textContent=epoch;
+        document.getElementById('nn-trl').textContent=T.loss.toFixed(3);
+        document.getElementById('nn-val').textContent=V.loss.toFixed(3);
+        var accSet = full ? VA : VA_EVAL;
+        document.getElementById('nn-acc').textContent=fmtPct(evalSet(net,accSet).acc);
+        drawPlot(hist);
+      }
+      var batchPtr=0;
+      function reset(){
+        running=false; userPaused=false; epoch=0; tstep=0; hist=[]; batchPtr=0;
+        TR=TR0.slice();                 // restore canonical order -> identical minibatches every run
+        rng=createRNG(20260617); net=makeNet();
+        document.getElementById('nn-status').textContent='';
+        document.getElementById('nn-run').textContent='▶ Train';
+        logEval(false); renderExample();
+        document.getElementById('nn-acc').textContent='—';
+      }
+      function frame(){
+        if(!running) return;
+        for(var k=0;k<BPF;k++){
+          if(batchPtr>=TR.length){ // epoch boundary
+            epoch++; batchPtr=0;
+            for(var i=TR.length-1;i>0;i--){ var j=Math.floor(rng()*(i+1)); var t=TR[i];TR[i]=TR[j];TR[j]=t; }
+            logEval(epoch%10===0); renderExample();
+          }
+          tstep++;
+          trainBatch(net, TR.slice(batchPtr, batchPtr+BS), 0.005, tstep);
+          batchPtr+=BS;
+        }
+        requestAnimationFrame(frame); // train as long as the slide is shown
+      }
+      function start(){
+        if(running) return;
+        userPaused=false; running=true;
+        document.getElementById('nn-status').textContent='training…';
+        document.getElementById('nn-run').textContent='⏸ Pause';
+        requestAnimationFrame(frame);
+      }
+
+      // ---- 5. Wire up ----------------------------------------------------
+      whenReady(function(){
+        buildArch();
+        buildData(); setupCanvas(); reset();
+        document.getElementById('nn-run').addEventListener('click', function(){
+          if(running){ running=false; userPaused=true; this.textContent='▶ Train'; document.getElementById('nn-status').textContent='paused'; }
+          else start();
+        });
+        document.getElementById('nn-reset').addEventListener('click', reset);
+        window.addEventListener('resize', function(){ setupCanvas(); drawPlot(hist); });
+        Reveal.on('slidechanged', function(e){
+          var onTrain = e.currentSlide && e.currentSlide.id==='nn-train-slide';
+          if(e.currentSlide && e.currentSlide.id==='nn-concept-slide') buildArch();
+          if(onTrain){
+            setupCanvas(); drawPlot(hist);
+            if(!running && !userPaused) setTimeout(start, 400); // auto-(re)start while slide is shown
+          } else if(running){
+            running=false; // pause training when leaving the slide (resumes on return)
+            document.getElementById('nn-run').textContent='▶ Train';
+          }
+        });
+      });
+    })();
+    </script>
+
+    <!-- Hierarchical feature learning (PDF p18) — CNN "what it learns" -->
+    
+
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; The forward model</p>
+      <h2>Simulation-based inference</h2>
+      <p class="subtitle" style="margin-top:0;">The forward model &mdash; one shot at a time, then a thousand</p>
+      <div style="display:flex; gap:18px; margin-top:6px; align-items:flex-start;">
+        <div style="flex:1 1 0; min-width:0;">
+          <div id="sbi-fm-cannon" style="width:100%; height:360px;"></div>
+          <p style="text-align:center; font-size:0.7em; color:#7f8c8d; margin:4px 0 0;">
+            \( \theta \sim \mathcal{U}(5^\circ,85^\circ),\ \ v \sim \mathcal{N}(10,0.2^2),\ \ x \sim \mathcal{N}\!\big(\tfrac{v^2}{g}\sin 2\theta,\ 0.5^2\big) \)
+          </p>
+        </div>
+        <div style="flex:1 1 0; min-width:0;">
+          <div id="sbi-fm-scatter" style="width:100%; height:360px;"></div>
+          <p style="text-align:center; font-size:0.7em; color:#7f8c8d; margin:4px 0 0;">
+            Each shot is one draw \((\theta, x)\) from the simulator &mdash; the cloud is the joint \(p(\theta, x)\).
+          </p>
+        </div>
+      </div>
+      <div style="text-align:center; margin-top:10px;">
+        <button id="sbi-fm-fire" style="font-size:0.85em; padding:7px 16px; margin:0 6px; cursor:pointer; border:1px solid #2980b9; background:#eaf2f8; color:#2980b9; border-radius:6px;">&#x1F3AF; Fire once</button>
+        <button id="sbi-fm-run" style="font-size:0.85em; padding:7px 16px; margin:0 6px; cursor:pointer; border:1px solid #27ae60; background:#eafaf1; color:#1e7e3f; border-radius:6px;">&#x21bb; Run 1000 sims</button>
+        <span id="sbi-fm-count" style="font-size:0.8em; color:#7f8c8d; margin-left:8px;">0 shots</span>
+      </div>
+    </section>
+
+    <script>
+    /* Live forward model for the SBI basics slide. Left: a single cannon shot
+       (θ, v sampled, noisy landing x). Right: the accumulating (θ, x) cloud =
+       samples from the joint p(θ, x). "Fire once" appends one shot + one point;
+       "Run 1000 sims" refills the cloud in one go. Uses global createRNG/gaussN
+       (presentation-helpers.js) and Plotly (lib/plotly.min.js). */
+    (function(){
+      function whenReady(cb){
+        if (window.Reveal && Reveal.on) cb();
+        else window.addEventListener('load', function(){ if (window.Reveal && Reveal.on) cb(); });
+      }
+      var G = 9.81, V_MEAN = 10.0, V_STD = 0.2, NOISE = 0.5;
+      var TH_MIN = 5*Math.PI/180, TH_MAX = 85*Math.PI/180;
+      var V_HI = V_MEAN + 3*V_STD;
+      var X_RANGE = [-0.5, (V_HI*V_HI)/G + 1.0];
+      var Y_MAX   = (V_HI*V_HI)/(2*G) + 0.3;
+
+      var rng = null;  // lazily created (presentation-helpers.js loads after this inline script)
+      var scatTh = [], scatX = [];
+      var last = null;  // {theta, v, x}
+
+      function lay(o){ return Object.assign({
+        paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+        font:{family:'inherit', size:12, color:'#2c3e50'}, hovermode:false
+      }, o); }
+
+      function trajV(theta, v, nPts){
+        var vx = v*Math.cos(theta), vy = v*Math.sin(theta);
+        var tLand = 2*vy/G, xs = new Array(nPts), ys = new Array(nPts);
+        for (var i=0;i<nPts;i++){ var t = tLand*i/(nPts-1); xs[i]=vx*t; ys[i]=vy*t-0.5*G*t*t; }
+        return {xs:xs, ys:ys};
+      }
+
+      function sampleShot(){
+        if (!rng) rng = createRNG(20260617);
+        var theta = TH_MIN + (TH_MAX - TH_MIN)*rng();
+        var v   = V_MEAN + V_STD*gaussN(rng);
+        var eps = NOISE*gaussN(rng);
+        var x   = (v*v/G)*Math.sin(2*theta) + eps;
+        return {theta:theta, v:v, x:x};
+      }
+
+      function drawCannon(){
+        if (!last) return;
+        var theta = last.theta, v = last.v;
+        var traj = trajV(theta, v, 80);
+        // a few faded ghost arcs at preset angles for context
+        var ghostAngles = [0.25, 0.5, 0.75, 1.0, 1.3];
+        var ghosts = ghostAngles.map(function(a){
+          var t = trajV(a, V_MEAN, 50);
+          return {x:t.xs, y:t.ys, mode:'lines', line:{color:'rgba(127,140,141,0.16)', width:1},
+                  hoverinfo:'skip', showlegend:false};
+        });
+        var ground = {x:X_RANGE, y:[0,0], mode:'lines', line:{color:'#34495e', width:1.2},
+                      hoverinfo:'skip', showlegend:false};
+        var barrel = {x:[0, 0.6*Math.cos(theta)], y:[0, 0.6*Math.sin(theta)], mode:'lines',
+                      line:{color:'#2c3e50', width:7}, hoverinfo:'skip', showlegend:false};
+        var arc = {x:[], y:[]};
+        for (var i=0;i<=24;i++){ var a=theta*i/24; arc.x.push(0.9*Math.cos(a)); arc.y.push(0.9*Math.sin(a)); }
+        var arcTr = {x:arc.x, y:arc.y, mode:'lines', line:{color:'#7f8c8d', width:1, dash:'dot'},
+                     hoverinfo:'skip', showlegend:false};
+        var path = {x:traj.xs, y:traj.ys, mode:'lines', name:'trajectory', line:{color:'#2980b9', width:3.5}};
+        var landing = {x:[last.x], y:[0], mode:'markers', name:'landing x',
+                       marker:{size:16, color:'#c0392b', symbol:'x-thin', line:{color:'#c0392b', width:4}}};
+        Plotly.react('sbi-fm-cannon', [ground].concat(ghosts, [arcTr, path, barrel, landing]), lay({
+          margin:{t:20, r:12, b:38, l:48},
+          xaxis:{title:'horizontal distance (m)', range:X_RANGE, zeroline:false},
+          yaxis:{title:'height (m)', range:[-0.6, Y_MAX]},
+          showlegend:false,
+          annotations:[{x:last.x, y:0.45, text:'θ='+(last.theta*180/Math.PI).toFixed(0)+'°, v='+last.v.toFixed(1),
+                        showarrow:false, font:{size:11, color:'#7f8c8d'}, xanchor:'center'}]
+        }), {displayModeBar:false, responsive:true});
+        Plotly.Plots.resize('sbi-fm-cannon');
+      }
+
+      function drawScatter(){
+        var cloud = {x:scatTh, y:scatX, mode:'markers', name:'simulations',
+                     marker:{size:4, color:'rgba(39,174,96,0.5)'}};
+        var traces = [cloud];
+        if (last) traces.push({x:[last.theta], y:[last.x], mode:'markers', name:'latest shot',
+                     marker:{size:11, color:'#c0392b', line:{color:'#fff', width:1.2}}});
+        Plotly.react('sbi-fm-scatter', traces, lay({
+          margin:{t:20, r:12, b:38, l:48},
+          xaxis:{title:'launch angle θ (rad)', range:[TH_MIN, TH_MAX]},
+          yaxis:{title:'landing position x (m)', range:[-0.5, 11.5]},
+          showlegend:false
+        }), {displayModeBar:false, responsive:true});
+        Plotly.Plots.resize('sbi-fm-scatter');
+      }
+
+      function updateCount(){
+        var el = document.getElementById('sbi-fm-count');
+        if (el) el.textContent = scatTh.length + (scatTh.length===1?' shot':' shots');
+      }
+
+      function fireOnce(){
+        last = sampleShot();
+        scatTh.push(last.theta); scatX.push(last.x);
+        drawCannon(); drawScatter(); updateCount();
+      }
+      function runMany(){
+        scatTh = []; scatX = [];
+        for (var i=0;i<1000;i++){ var s = sampleShot(); scatTh.push(s.theta); scatX.push(s.x); last = s; }
+        drawCannon(); drawScatter(); updateCount();
+      }
+
+      var wired = false;
+      function ensure(){
+        if (!document.getElementById('sbi-fm-cannon')) return;
+        if (!wired){
+          document.getElementById('sbi-fm-fire').onclick = fireOnce;
+          document.getElementById('sbi-fm-run').onclick  = runMany;
+          wired = true;
+        }
+        if (!last) fireOnce();           // seed with a first shot so the slide isn't empty
+        else { drawCannon(); drawScatter(); }
+      }
+
+      whenReady(function(){
+        function maybe(slide){ if (slide && slide.querySelector && slide.querySelector('#sbi-fm-cannon')) ensure(); }
+        Reveal.on('slidechanged', function(e){ maybe(e.currentSlide); });
+        Reveal.on('ready',        function(e){ maybe(e.currentSlide); });
+        window.addEventListener('resize', function(){
+          if (!document.getElementById('sbi-fm-cannon')) return;
+          try { ['sbi-fm-cannon', 'sbi-fm-scatter'].forEach(function(id){ Plotly.Plots.resize(id); }); } catch(_){}
+        });
+        // already-ready case (e.g. page (re)loaded directly on this slide)
+        if (Reveal.isReady && Reveal.isReady()) maybe(Reveal.getCurrentSlide && Reveal.getCurrentSlide());
+      });
+    })();
+    </script>
+
+    <!-- SBI basics: live Rejection ABC demo (cloud -> posterior) -->
+    
+
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; Rejection ABC</p>
+      <h2>Demo &mdash; Rejection ABC</h2>
+      <p class="subtitle" style="margin-top:0;">Rank the same cloud against \(x_\mathrm{obs}\), keep the closest, read off the posterior</p>
+      <div style="display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center; justify-content:center; font-size:0.8em; margin-top:2px;">
+        <label>\(N\) <input type="range" id="d1-n" min="100" max="20000" step="100" value="2000" style="width:140px; vertical-align:middle;">
+          <span id="d1-n-val" style="display:inline-block; min-width:3.2em;">2000</span></label>
+        <label>\(M\) <input type="range" id="d1-m" min="5" max="2000" step="5" value="200" style="width:110px; vertical-align:middle;">
+          <span id="d1-m-val" style="display:inline-block; min-width:2.6em;">200</span></label>
+        <label>\(x_\mathrm{obs}\) <input type="range" id="d1-xobs" min="3.5" max="10.4" step="0.05" value="9.50" style="width:140px; vertical-align:middle;">
+          <span id="d1-xobs-val" style="display:inline-block; min-width:2.6em;">9.50</span> m</label>
+        <button id="d1-resample" style="font-size:0.95em; padding:5px 12px; cursor:pointer; border:1px solid #27ae60; background:#eafaf1; color:#1e7e3f; border-radius:6px;">&#x21bb; Resample</button>
+        <span id="d1-readout" style="color:#7f8c8d;"></span>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:6px;">
+        <div id="d1-scatter" style="flex:1; height:330px;"></div>
+        <div id="d1-post"    style="flex:1; height:330px;"></div>
+      </div>
+      <p style="text-align:center; font-size:0.72em; color:#1e7e3f; margin:4px 0 0;">
+        <strong>Amortised:</strong> moving \(x_\mathrm{obs}\) does <em>not</em> re-run the simulator &mdash; the same cloud is just re-ranked. Simulation cost is paid once; every new observation is then essentially free.
+      </p>
+    </section>
+
+    <script>
+    /* Live Rejection ABC demo, ported from the ML4PhA lecture deck. Self-contained:
+       its own ball-throw simulator (fixed muzzle speed v0, single throw) and an
+       analytic reference posterior. The (theta,x) cloud is ranked by |x - x_obs|;
+       the top-M closest theta's form the ABC posterior histogram. Uses global
+       createRNG / gaussN (presentation-helpers.js) and Plotly (lib/plotly.min.js). */
+    (function(){
+      function whenReady(cb){
+        if (window.Reveal && Reveal.on) cb();
+        else window.addEventListener('load', function(){ if (window.Reveal && Reveal.on) cb(); });
+      }
+      var V0 = 10.0, G = 9.81, SIGMA = 0.3;
+      var PRIOR_LO = 0.05, PRIOR_HI = Math.PI/2 - 0.05;
+      var THETA_TRUE = 0.60;
+      var RMAX = (V0*V0)/G;
+      function rangeMean(theta){ return (V0*V0/G)*Math.sin(2*theta); }
+
+      function bl(o){ return Object.assign({
+        paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+        font:{family:'inherit', size:12, color:'#2c3e50'}, hovermode:false,
+        margin:{t:24, r:14, b:40, l:52},
+        legend:{x:0.02, y:0.98, font:{size:10}, bgcolor:'rgba(255,255,255,0.6)'}
+      }, o); }
+
+      var NG = 401, THETA_GRID = new Array(NG);
+      for (var i=0;i<NG;i++) THETA_GRID[i] = PRIOR_LO + (PRIOR_HI-PRIOR_LO)*i/(NG-1);
+      function refPosterior(xObs){
+        var v = SIGMA*SIGMA, p = new Array(NG), pmax = -Infinity, i;
+        for (i=0;i<NG;i++){ var mu=rangeMean(THETA_GRID[i]); p[i]=-0.5*(xObs-mu)*(xObs-mu)/v; if(p[i]>pmax)pmax=p[i]; }
+        for (i=0;i<NG;i++) p[i]=Math.exp(p[i]-pmax);
+        var dth=THETA_GRID[1]-THETA_GRID[0], area=0;
+        for (i=0;i<NG-1;i++) area += 0.5*(p[i]+p[i+1])*dth;
+        if (area>0) for (i=0;i<NG;i++) p[i]/=area;
+        return p;
+      }
+
+      function simulateCloud(N, seed){
+        var rng = createRNG(seed), theta = new Array(N), x = new Array(N);
+        for (var i=0;i<N;i++){ theta[i]=PRIOR_LO+(PRIOR_HI-PRIOR_LO)*rng();
+          x[i]=rangeMean(theta[i]) + SIGMA*gaussN(rng); }
+        return {theta:theta, x:x};
+      }
+      function topMidx(x, target, M){
+        var N=x.length, idx=new Array(N); for(var i=0;i<N;i++) idx[i]=i;
+        idx.sort(function(a,b){ return Math.abs(x[a]-target)-Math.abs(x[b]-target); });
+        return idx.slice(0, M);
+      }
+
+      var seed = 11, cache = {key:null, theta:null, x:null};
+      function getCloud(N){
+        var key = N+'|'+seed;
+        if (cache.key !== key){ var s = simulateCloud(N, seed); cache = {key:key, theta:s.theta, x:s.x}; }
+        return cache;
+      }
+
+      function draw(){
+        if (!document.getElementById('d1-scatter')) return;
+        var N = parseInt(document.getElementById('d1-n').value);
+        var M = Math.min(parseInt(document.getElementById('d1-m').value), N);
+        var xObs = parseFloat(document.getElementById('d1-xobs').value);
+        document.getElementById('d1-n-val').textContent = N;
+        document.getElementById('d1-m-val').textContent = M;
+        document.getElementById('d1-xobs-val').textContent = xObs.toFixed(2);
+
+        var sim = getCloud(N);
+        var keep = topMidx(sim.x, xObs, M);
+        var accT = keep.map(function(i){ return sim.theta[i]; });
+        var accX = keep.map(function(i){ return sim.x[i]; });
+        var epsEff = Math.max.apply(null, accX.map(function(v){ return Math.abs(v-xObs); }));
+        document.getElementById('d1-readout').textContent =
+          'M/N = '+(M/N).toFixed(3)+',  eps_eff = '+epsEff.toFixed(3)+' m';
+
+        Plotly.react('d1-scatter', [
+          { x:sim.theta, y:sim.x, mode:'markers', name:'all sims',
+            marker:{size:3, color:'rgba(127,140,141,0.45)'} },
+          { x:accT, y:accX, mode:'markers', name:'kept (top M)',
+            marker:{size:5, color:'#e67e22'} },
+          { x:[PRIOR_LO, PRIOR_HI], y:[xObs, xObs], mode:'lines', name:'x_obs',
+            line:{color:'#2c3e50', dash:'dash', width:1.5} },
+          { x:[PRIOR_LO, PRIOR_HI], y:[xObs-epsEff, xObs-epsEff], mode:'lines',
+            name:'eps_eff band', line:{color:'rgba(230,126,34,0.7)', width:1, dash:'dot'} },
+          { x:[PRIOR_LO, PRIOR_HI], y:[xObs+epsEff, xObs+epsEff], mode:'lines',
+            name:'', showlegend:false, line:{color:'rgba(230,126,34,0.7)', width:1, dash:'dot'} }
+        ], bl({
+          xaxis:{title:'theta (rad)', range:[PRIOR_LO, PRIOR_HI]},
+          yaxis:{title:'x (m)',   range:[-0.5, RMAX+0.5]}
+        }), {displayModeBar:false, responsive:true});
+        Plotly.Plots.resize('d1-scatter');
+
+        var refP = refPosterior(xObs);
+        var refMax = Math.max.apply(null, refP);
+        Plotly.react('d1-post', [
+          { x:accT, type:'histogram', name:'ABC posterior',
+            histnorm:'probability density', autobinx:false,
+            xbins:{start:PRIOR_LO, end:PRIOR_HI, size:(PRIOR_HI-PRIOR_LO)/40},
+            marker:{color:'rgba(230,126,34,0.55)', line:{color:'#b3621c', width:0.5}} },
+          { x:THETA_GRID, y:refP, mode:'lines', name:'reference',
+            line:{color:'#c0392b', width:3} },
+          { x:[THETA_TRUE, THETA_TRUE], y:[0, refMax*1.15], mode:'lines', name:'theta_true',
+            line:{color:'#2c3e50', dash:'dash', width:1.2} }
+        ], bl({
+          xaxis:{title:'theta (rad)', range:[PRIOR_LO, PRIOR_HI]},
+          yaxis:{title:'density', rangemode:'tozero'}
+        }), {displayModeBar:false, responsive:true});
+        Plotly.Plots.resize('d1-post');
+      }
+
+      var wired = false;
+      function ensure(){
+        if (!document.getElementById('d1-scatter')) return;
+        if (!wired){
+          document.getElementById('d1-n').addEventListener('input', draw);
+          document.getElementById('d1-m').addEventListener('input', draw);
+          document.getElementById('d1-xobs').addEventListener('input', draw);
+          document.getElementById('d1-resample').onclick = function(){
+            seed = (seed*1664525 + 1013904223) | 0; cache.key = null; draw();
+          };
+          wired = true;
+        }
+        draw();
+      }
+
+      whenReady(function(){
+        function maybe(slide){ if (slide && slide.querySelector && slide.querySelector('#d1-scatter')) ensure(); }
+        Reveal.on('slidechanged', function(e){ maybe(e.currentSlide); });
+        Reveal.on('ready',        function(e){ maybe(e.currentSlide); });
+        window.addEventListener('resize', function(){
+          if (!document.getElementById('d1-scatter')) return;
+          try { ['d1-scatter', 'd1-post'].forEach(function(id){ Plotly.Plots.resize(id); }); } catch(_){}
+        });
+        // already-ready case (e.g. page (re)loaded directly on this slide)
+        if (Reveal.isReady && Reveal.isReady()) maybe(Reveal.getCurrentSlide && Reveal.getCurrentSlide());
+      });
+    })();
+    </script>
+
+    <!-- SBI basics: key takeaways (generic strengths vs open challenges) -->
+    
+
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; Rejection ABC</p>
+      <h2>Key takeaways</h2>
+      <p class="subtitle" style="margin-top:0;">Generic properties and challenges with this approach.</p>
+      <div style="display:flex; gap:16px; margin-top:12px; align-items:stretch;">
+
+        <div class="box box-green fragment" style="flex:1; font-size:0.8em;">
+          <p style="margin:0 0 6px; color:#1e7e3f; font-weight:700;">Works generically (and keeps working)</p>
+          <ul style="margin:0; padding-left:1.1em; line-height:1.45;">
+            <li style="margin-bottom:6px;"><strong>Amortised inference.</strong> Pay the simulation cost once; 
+              any new observation \(x_\mathrm{obs}\) is then a free query.</li>
+            <li style="margin-bottom:6px;"><strong>No likelihood evaluations.</strong> 
+              Only simulator samples are needed, never a pointwise \(p(x\mid\theta)\) evaluation.</li>
+            <li><strong>Trivial marginalisation.</strong> Nuisances (here the muzzle speed \(v\)) fold in for free by sampling them inside the simulator.</li>
+          </ul>
+        </div>
+
+        <div class="box box-orange fragment" style="flex:1; font-size:0.8em;">
+          <p style="margin:0 0 6px; color:#cf6a1a; font-weight:700;">Stays hard (what modern SBI is about)</p>
+          <ul style="margin:0; padding-left:1.1em; line-height:1.45;">
+            <li style="margin-bottom:6px;"><strong>The <span class="highlight">\(\varepsilon \to 0\)</span> limit.</strong> Sharper posteriors need a tighter acceptance band, which needs exponentially more simulations. This is the sample-efficiency cliff.</li>
+            <li style="margin-bottom:6px;"><strong>Density estimation in high D.</strong> Our demo was <span class="highlight">1-dimensional</span>; 
+              with many parameters histogram looses meaning and smoothing becomes hard. </li>
+            <li><strong>Summary construction.</strong> We only had one observable, for higher dimensional data we need sufficient data summaries.
+              Hand-picked summaries do not scale to images, waveforms or graphs.</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Neural SBI: learn the summary AND the density -->
+    
+
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; Neural SBI</p>
+      <h2>Neural SBI</h2>
+      <div style="display:flex; gap:18px; margin-top:8px; align-items:center;">
+
+        <div style="flex:1.05; text-align:center;">
+          <img src="img/p_nnsbi_pipeline.png" alt="Neural SBI pipeline: simulator, summary extractor, inference head, loss" style="max-width:100%; max-height:500px;">
+        </div>
+
+        <div style="flex:1; display:flex; flex-direction:column; gap:10px;">
+          <div class="box box-orange" style="font-size:0.78em;">
+            <strong style="color:#cf6a1a;">Summary extractor \(T_\phi(\mathbf{x})\).</strong>
+            Replaces the hand-picked summary. A network compresses raw data (images, waveforms, graphs) into a few informative numbers.
+          </div>
+          <div class="box box-blue" style="font-size:0.78em;">
+            <strong style="color:#2980b9;">Inference head \(q_\phi(\boldsymbol\theta\mid\mathbf{x})\).</strong>
+            Replaces the histogram / KDE. A network models the density of points directly: posterior, likelihood, ratio or score.
+          </div>
+          <div style="text-align:center;">
+            <img id="nnsbi-gif" src="img/p_nnsbi_summary.gif" data-src="img/p_nnsbi_summary.gif" alt="Learned 1-D summary and posterior during training" title="Click to replay" style="max-width:100%; max-height:250px; cursor:pointer;">
+          </div>
+        </div>
+
+      </div>
+      <p class="fragment" style="text-align:center; margin-top:8px; font-size:0.82em; color:#2c3e50;">
+        Both maps are trained end to end by a single gradient \(\nabla_\phi \mathcal{L}\): no hand-picked summary, no \(\varepsilon\), no accept / reject.
+      </p>
+    </section>
+
+    <script>
+    /* Restart the Neural-SBI summary gif from frame 0 whenever this slide is
+       shown (and on click), by reloading its src with a cache-busting suffix. */
+    (function(){
+      function whenReady(cb){
+        if (window.Reveal && Reveal.on) cb();
+        else window.addEventListener('load', function(){ if (window.Reveal && Reveal.on) cb(); });
+      }
+      var n = 0;
+      function restart(){
+        var img = document.getElementById('nnsbi-gif');
+        if (!img) return;
+        var base = img.getAttribute('data-src') || img.src.split('?')[0];
+        n += 1;
+        img.src = base + '?r=' + n;   // forces a refetch -> gif replays from frame 0
+      }
+      whenReady(function(){
+        var img = document.getElementById('nnsbi-gif');
+        if (img) img.addEventListener('click', restart);
+        function maybe(slide){ if (slide && slide.querySelector && slide.querySelector('#nnsbi-gif')) restart(); }
+        Reveal.on('slidechanged', function(e){ maybe(e.currentSlide); });
+        Reveal.on('ready',        function(e){ maybe(e.currentSlide); });
+        if (Reveal.isReady && Reveal.isReady()) maybe(Reveal.getCurrentSlide && Reveal.getCurrentSlide());
+      });
+    })();
+    </script>
+
+    <!-- Neural Posterior Estimation (PDF p28) -->
+    
+
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; Neural SBI</p>
+      <h2>Neural Posterior Estimation</h2>
+      <div style="text-align:center; margin-top:8px;">
+        <img src="img/p28_body.png" style="max-width:100%; max-height:560px;">
+      </div>
+      <p style="font-size:0.65em; color:#7f8c8d; text-align:left; margin:4px 0 0;">
+        Papamakarios, Sterratt, Murray 2018 &mdash; <em>Sequential Neural Likelihood: Fast Likelihood-Free Inference with Autoregressive Flows</em>
+      </p>
+    </section>
+
+    <!-- Simulation-based inference: SBI Bayesian/freq (PDF p19) -->
+    
+
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; The general recipe</p>
+      <h2>Simulation-based inference</h2>
+      <p class="subtitle" style="margin-top:0;">Solving Bayesian (&amp; Frequentist) inference problems based on simulation output</p>
+      <div style="text-align:center; margin:10px 0 8px;">
+        \[ q_\phi(\mathbf{z}\mid\mathbf{x}) \;\simeq\; \frac{p(\mathbf{x}\mid\mathbf{z})\,p(\mathbf{z})}{p(\mathbf{x})} \]
+      </div>
+      <div style="display:flex; gap:14px; align-items:flex-start; margin-top:6px;">
+        <div style="flex:1; text-align:center;">
+          <img src="img/p19_software.png" style="width:100%; max-height:310px; object-fit:contain;">
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center;">
+          <p style="font-size:0.85em; margin:0 0 6px;">Hundreds of method &amp; application papers</p>
+          <img src="img/p19_methods.png" style="width:100%; max-height:280px; object-fit:contain;">
+        </div>
+      </div>
+      <p style="font-size:0.65em; color:#7f8c8d; text-align:left; margin:4px 0 0;">
+        github.com/smsharma/awesome-neural-sbi
+        <span style="color:#95a0a8;">&middot; see also Cranmer, Brehmer &amp; Louppe 2020, arXiv:1911.01429</span>
+      </p>
+    </section>
+
+    <!-- SBI: lower simulation costs (PDF p23) -->
+    
+
+    <!-- ============================================================ -->
+    <!-- FLOW MATCHING (new for the hackathon deck)                   -->
+    <!-- ============================================================ -->
+
+    <!-- FM 1 — why representing a density is the hard part -->
+    <section>
+      <p class="eyebrow">Foundations of SBI &gt; Flow matching</p>
+      <h2>The hard part: <em style="font-style:normal; color:#2980b9;">representing</em> a probability density</h2>
+      <p class="subtitle" style="margin-top:0;">A prior, a likelihood, a posterior, an evidence &mdash; all of statistics is a statement about distributions.</p>
+
+      <div style="display:flex; gap:22px; margin-top:8px; align-items:flex-start;">
+
+        <div style="flex:0.92; font-size:0.78em; line-height:1.45;">
+          <p style="margin:0 0 6px;">
+            In Part&nbsp;1 an MLP fitted a <em>function</em>. We now want it to fit a
+            <em>distribution</em>, \( q_\phi(\theta) \approx p(\theta) \), given only
+            <strong>samples</strong> of \(p\). That object is far more constrained:
+          </p>
+          <ul style="margin:0 0 8px; padding-left:1.1em;">
+            <li><strong>non-negative</strong>, \(q_\phi(\theta)\ge 0\) &mdash; easy, exponentiate;</li>
+            <li><strong>normalized</strong>, \(\int q_\phi(\theta)\,d\theta = 1\) &mdash; a
+                <span class="highlight">global</span> constraint: change the network anywhere
+                and the integral changes everywhere.</li>
+          </ul>
+          <p style="margin:0 0 6px;">And we need <em>two</em> operations, both fast, both called millions of times:</p>
+          <div class="box box-blue" style="margin:6px 0; padding:9px 13px;">
+            <strong>evaluate</strong> &mdash; given \(\theta\), return \(q_\phi(\theta)\)
+            <span style="color:#7f8c8d;">(weights, likelihoods, model comparison)</span><br>
+            <strong>sample</strong> &mdash; draw fresh \(\theta \sim q_\phi\)
+            <span style="color:#7f8c8d;">(error bars, corner plots, error propagation)</span>
+          </div>
+          <p style="margin:6px 0 0;">
+            You cannot simply declare an MLP's output to be a density and train it.
+            The classical escapes each give something up &mdash;
+          </p>
+        </div>
+
+        <div style="flex:1.08;">
+          <table style="width:100%; border-collapse:collapse; font-size:0.7em; line-height:1.3;">
+            <tr style="background:#ecf0f1;">
+              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">representation</th>
+              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">flexible?</th>
+              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">evaluate</th>
+              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">sample</th>
+            </tr>
+            <tr style="border-bottom:1px solid #e5e8ea;">
+              <td style="padding:6px 8px;"><strong>Gaussian head</strong><br><span style="color:#7f8c8d;">predict \(\mu,\Sigma\)</span></td>
+              <td style="padding:6px 8px; color:#c0392b;">almost nothing</td>
+              <td style="padding:6px 8px; color:#27ae60;">exact, instant</td>
+              <td style="padding:6px 8px; color:#27ae60;">exact, instant</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e5e8ea;">
+              <td style="padding:6px 8px;"><strong>Energy-based</strong><br><span style="color:#7f8c8d;">\(q_\phi \propto e^{-E_\phi(\theta)}\)</span></td>
+              <td style="padding:6px 8px; color:#27ae60;">unrestricted</td>
+              <td style="padding:6px 8px; color:#e67e22;">up to unknown \(Z\)</td>
+              <td style="padding:6px 8px; color:#c0392b;">MCMC &mdash; slow</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e5e8ea;">
+              <td style="padding:6px 8px;"><strong>Normalizing flow</strong><br><span style="color:#7f8c8d;">invertible layers</span></td>
+              <td style="padding:6px 8px; color:#e67e22;">architecture-limited</td>
+              <td style="padding:6px 8px; color:#27ae60;">exact</td>
+              <td style="padding:6px 8px; color:#27ae60;">exact</td>
+            </tr>
+            <tr style="background:#eaf3fb; border-left:4px solid #2980b9;">
+              <td style="padding:7px 8px;"><strong>Flow matching</strong><br><span style="color:#7f8c8d;">learn a velocity field</span></td>
+              <td style="padding:7px 8px; color:#27ae60;">unrestricted MLP</td>
+              <td style="padding:7px 8px; color:#e67e22;">ODE solve</td>
+              <td style="padding:7px 8px; color:#27ae60;">ODE solve</td>
+            </tr>
+          </table>
+          <p style="font-size:0.72em; color:#34495e; margin:10px 2px 0; line-height:1.4;">
+            Flow matching buys an <strong>unrestricted network</strong>, genuine samples and a
+            normalized density &mdash; and trains by <strong>plain regression</strong>.
+            The price: sampling is an ODE solve, not one forward pass.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FM 2 — the three equations -->
+    <section>
+      <p class="eyebrow">Foundations of SBI &gt; Flow matching</p>
+      <h2>Flow matching in three equations</h2>
+      <p class="subtitle" style="margin-top:0;">Start from a unit Gaussian and <em>move the points</em> until they are distributed like \(p\).</p>
+
+      <div style="display:flex; gap:22px; margin-top:6px; align-items:flex-start;">
+
+        <div style="flex:1.15; font-size:0.76em; line-height:1.4;">
+          <p style="margin:0 0 4px;">
+            The motion is a <strong>velocity field</strong> \(v_\phi(\theta,t)\) &mdash;
+            an MLP exactly like Part&nbsp;1's, taking a position \(\theta\) and a time
+            \(t\in[0,1]\). Write \(\theta_0\sim\mathcal N(0,I)\) for a noise point and
+            \(\theta_1\sim p\) for a data point.
+          </p>
+
+          <p style="margin:8px 0 0;"><strong>1. Train.</strong> Sit on the straight line between a random
+            pair and regress the velocity onto its direction:</p>
+          <div style="text-align:center; margin:0;">
+            \[ \mathcal L(\phi) = \mathbb E_{t,\theta_0,\theta_1}\Big[\;\big\|\,v_\phi\big(
+               \underbrace{(1-t)\theta_0 + t\,\theta_1}_{\textstyle \theta_t},\,t\big)
+               - (\theta_1-\theta_0)\,\big\|^2\Big],\quad t\sim U(0,1) \]
+          </div>
+
+          <p style="margin:6px 0 0;"><strong>2. Sample.</strong> Integrate the learned field from noise to data:</p>
+          <div style="text-align:center; margin:0;">
+            \[ \theta(0)=\theta_0\sim\mathcal N(0,I),\qquad
+               \frac{d\theta}{dt}=v_\phi\big(\theta(t),t\big),\qquad
+               \theta(1)\sim q_\phi \approx p \]
+          </div>
+
+          <p style="margin:6px 0 0;"><strong>3. Evaluate.</strong> Integrate <em>backwards</em>, accumulating the divergence:</p>
+          <div style="text-align:center; margin:0;">
+            \[ \log q_\phi(\theta_1) = \log \mathcal N\big(\theta(0);0,I\big)
+               - \int_0^1 \nabla\!\cdot v_\phi\big(\theta(t),t\big)\,dt \]
+          </div>
+        </div>
+
+        <div style="flex:0.85;">
+          <div style="background:#2c3e50; border-radius:8px; padding:11px 13px; margin-top:2px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.6em; color:#95a5a6;
+                        letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">Equation 1, verbatim</div>
+<pre style="margin:0; background:none; box-shadow:none;"><code style="font-size:0.52em; line-height:1.45; color:#ecf0f1; background:none;">def fm_loss(net, th1, cond=None):
+    th0 = torch.randn_like(th1)
+    t   = torch.rand(len(th1), 1)
+    tht = (1 - t) * th0 + t * th1
+    v   = net(tht, t, cond)
+    return ((v - (th1 - th0))**2).mean()</code></pre>
+          </div>
+          <p style="font-size:0.7em; color:#34495e; margin:9px 2px 0; line-height:1.4;">
+            Note what is <em>absent</em>: no integration, no samples from the model, no density,
+            no Jacobian. It is Part&nbsp;1's regression loss with a fancier target &mdash; and it is
+            the <strong>same six lines</strong> that will analyze a LISA signal in Part&nbsp;5.
+          </p>
+          <div class="box box-orange" style="margin-top:9px; padding:9px 13px; font-size:0.72em;">
+            <em>Why</em> regressing onto straight lines between <strong>unrelated</strong> random pairs
+            yields a field that transports \(\mathcal N(0,I)\) to \(p\) is genuinely non-obvious.
+            Take it as a black box with three knobs &mdash; the three equations are all of them.
+          </div>
+        </div>
+      </div>
+
+      <p style="font-size:0.6em; color:#7f8c8d; text-align:left; margin:6px 0 0;">
+        Lipman <em>et al.</em> 2022, arXiv:2210.02747 &middot; Liu <em>et al.</em> 2022, arXiv:2209.03003 &middot;
+        Albergo &amp; Vanden-Eijnden 2022, arXiv:2209.15571 &middot; for GW posteriors: Dax <em>et al.</em> 2023, arXiv:2305.17161
+      </p>
+    </section>
+
+    <!-- FM 3 — live demo of the flow -->
+    <section id="fm-demo" data-fm-slide>
+      <p class="eyebrow">Foundations of SBI &gt; Flow matching</p>
+      <h2>Flow matching &mdash; <em style="font-style:normal; color:#2980b9;">watch the flow</em></h2>
+
+      <div style="display:flex; gap:20px; margin-top:4px; align-items:flex-start;">
+
+        <!-- LEFT: explanation + controls -->
+        <div style="flex:0.82; font-size:0.74em; line-height:1.4;">
+          <p style="margin:0 0 7px;">
+            <strong>Left:</strong> what training sees. Random pairs
+            (<span style="color:#95a5a6;">noise \(\theta_0\)</span>,
+            <span style="color:#c0392b;">data \(\theta_1\)</span>) joined by a straight line;
+            the network is asked, at the <span style="color:#2980b9;">dot \(\theta_t\)</span>,
+            to output the arrow \(\theta_1-\theta_0\). Pairs are drawn <em>independently</em> &mdash;
+            the lines cross wildly and no single pair knows anything about the target shape.
+          </p>
+          <p style="margin:0 0 7px;">
+            <strong>Right:</strong> what the <em>average</em> of those arrows does. Integrating
+            \(d\theta/dt = v(\theta,t)\) carries a Gaussian blob (t=0) onto the target (t=1).
+            The crossings average out; the transport does not.
+          </p>
+
+          <div class="ctrl-row" style="margin-top:12px;">
+            <button id="fm-play"
+              style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:0.95em;
+                     color:#fff; background:#2980b9; border:none; border-radius:7px;
+                     padding:8px 15px; cursor:pointer;">Pause &#10074;&#10074;</button>
+            <button id="fm-target"
+              style="font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:0.9em;
+                     color:#34495e; background:#ecf0f1; border:none; border-radius:7px;
+                     padding:8px 13px; cursor:pointer;">Target: banana</button>
+            <label style="user-select:none;"><input type="checkbox" id="fm-trails">trails</label>
+          </div>
+          <div style="margin-top:9px; font-size:0.95em; color:#34495e;">
+            <span style="font-family:'Space Grotesk',sans-serif; font-weight:700;">t = <span id="fm-t">0.00</span></span>
+            <div style="height:7px; background:#ecf0f1; border-radius:4px; margin-top:4px; overflow:hidden;">
+              <div id="fm-bar" style="height:100%; width:0%; background:linear-gradient(90deg,#2980b9,#e74c3c);"></div>
+            </div>
+          </div>
+
+          <p style="margin:11px 0 0; font-size:0.85em; color:#7f8c8d; font-style:italic;">
+            The field shown is the <em>exact</em> flow-matching optimum for the plotted sample set
+            (closed form for an empirical target), so this is the flow a perfectly trained network
+            would produce &mdash; nothing here is fitted.
+          </p>
+          <p style="margin:6px 0 0; font-size:0.78em; color:#95a0a8;">
+            Both targets are shapes you meet in GW parameter estimation: a curved degeneracy, and
+            multi-modality along a curve.
+          </p>
+        </div>
+
+        <!-- RIGHT: the two canvases -->
+        <div style="flex:1.18; display:flex; gap:10px;">
+          <div style="flex:1; background:#fff; border:1px solid #e5e8ea; border-radius:8px; padding:6px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:0.62em;
+                        color:#34495e; margin:0 0 3px 4px;">Training pairs &nbsp;&middot;&nbsp; \(\theta_0 \rightarrow \theta_1\)</div>
+            <canvas id="fm-cv-pairs" width="600" height="600"
+                    style="width:100%; height:auto; display:block; border-radius:5px;"></canvas>
+          </div>
+          <div style="flex:1; background:#fff; border:1px solid #e5e8ea; border-radius:8px; padding:6px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:0.62em;
+                        color:#34495e; margin:0 0 3px 4px;">Sampling &nbsp;&middot;&nbsp; Euler steps of \(v(\theta,t)\)</div>
+            <canvas id="fm-cv-flow" width="600" height="600"
+                    style="width:100%; height:auto; display:block; border-radius:5px;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <script>
+      (function () {
+        var sec = document.getElementById('fm-demo');
+        var cvP = document.getElementById('fm-cv-pairs');
+        var cvF = document.getElementById('fm-cv-flow');
+        var ctxP = cvP.getContext('2d'), ctxF = cvF.getContext('2d');
+
+        var LIM = 3.2;                       // world half-width, both panels
+        var NDATA = 420;                     // target points defining the empirical density
+        var NCLOUD = 420;                    // transported particles
+        var STEPS = 90;                      // Euler steps from t=0 to t=1
+        var SMIN = 0.055;                    // floor on (1-t): keeps the field finite at t->1
+        var HOLD = 26;                       // frames to hold the finished sample
+
+        // local copies of the presentation-helpers RNG: this script runs at parse
+        // time, before lib/presentation-helpers.js is loaded at the end of <body>.
+        function createRNG(seed) {
+          return function () {
+            seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+            var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+          };
+        }
+        var rng = createRNG(20260727);
+        function gs() { return Math.sqrt(-2 * Math.log(rng() + 1e-12)) * Math.cos(2 * Math.PI * rng()); }
+
+        // ---------- targets ----------
+        // banana: a curved degeneracy, theta2 constrained through theta2 + theta1^2
+        function banana(n) {
+          var out = [];
+          for (var i = 0; i < n; i++) {
+            var a = 5.0 * rng() - 2.5;
+            var b = -0.55 * a * a + 1.15 + 0.16 * gs();
+            out.push([0.78 * a + 0.05 * gs(), b]);
+          }
+          return out;
+        }
+        // spiral: multi-modal along a curve
+        function spiral(n) {
+          var out = [];
+          for (var i = 0; i < n; i++) {
+            var u = rng(), r = 0.35 + 2.35 * u, a = 4.4 * u;
+            // the +0.75 / -0.13 shift just recentres the arc in the panel
+            out.push([r * Math.cos(a) + 0.75 + 0.09 * gs(),
+                      r * Math.sin(a) - 0.13 + 0.09 * gs()]);
+          }
+          return out;
+        }
+        var TARGETS = [{ name: 'banana', make: banana }, { name: 'spiral', make: spiral }];
+        var ti = 0, data = TARGETS[0].make(NDATA);
+
+        // ---------- the exact flow-matching velocity field ----------
+        // For the linear interpolant theta_t = (1-t) theta_0 + t theta_1 and an empirical
+        // target {theta_1^j}, the minimiser of the FM loss is available in closed form:
+        //   p_t = (1/N) sum_j N(theta; t theta_1^j, (1-t)^2 I)
+        //   v(theta,t) = sum_j w_j(theta,t) (theta_1^j - theta) / (1-t),
+        //   w_j proportional to N(theta; t theta_1^j, (1-t)^2 I).
+        // So we can show the flow a perfectly trained net would learn, without training.
+        function velocity(qx, qy, t, out) {
+          var s = Math.max(1 - t, SMIN), inv = 1 / (2 * s * s);
+          var best = -Infinity, i, d0, d1, q;
+          var w = velocity._w || (velocity._w = new Float64Array(NDATA));
+          for (i = 0; i < NDATA; i++) {                 // log-weights
+            d0 = qx - t * data[i][0]; d1 = qy - t * data[i][1];
+            q = -(d0 * d0 + d1 * d1) * inv;
+            w[i] = q; if (q > best) best = q;
+          }
+          var sum = 0;                                  // exponentiate, max-subtracted
+          for (i = 0; i < NDATA; i++) { w[i] = Math.exp(w[i] - best); sum += w[i]; }
+          var vx = 0, vy = 0, iv = 1 / (sum * s);
+          for (i = 0; i < NDATA; i++) { vx += w[i] * (data[i][0] - qx); vy += w[i] * (data[i][1] - qy); }
+          out[0] = vx * iv; out[1] = vy * iv;
+        }
+
+        // ---------- state ----------
+        var cloud = [], trail = [], step = 0, hold = 0, playing = true, raf = null;
+        var pairs = [], pairAge = 0;
+        var vtmp = [0, 0];
+
+        function resetCloud() {
+          cloud = []; trail = [];
+          for (var i = 0; i < NCLOUD; i++) { cloud.push([gs(), gs()]); trail.push([]); }
+          step = 0; hold = 0;
+        }
+        function newPairs() {
+          pairs = [];
+          for (var i = 0; i < 11; i++) {
+            var j = (rng() * NDATA) | 0;
+            pairs.push({ th0: [gs(), gs()], th1: data[j], t: 0.12 + 0.76 * rng() });
+          }
+          pairAge = 0;
+        }
+
+        // ---------- drawing ----------
+        function px(c, x) { return (x + LIM) / (2 * LIM) * c.width; }
+        function py(c, y) { return (1 - (y + LIM) / (2 * LIM)) * c.height; }
+        function frame(ctx, c) {
+          ctx.clearRect(0, 0, c.width, c.height);
+          ctx.fillStyle = '#fbfcfd'; ctx.fillRect(0, 0, c.width, c.height);
+          ctx.strokeStyle = '#eef1f3'; ctx.lineWidth = 2;
+          for (var g = -3; g <= 3; g++) {
+            ctx.beginPath(); ctx.moveTo(px(c, g), 0); ctx.lineTo(px(c, g), c.height); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, py(c, g)); ctx.lineTo(c.width, py(c, g)); ctx.stroke();
+          }
+          ctx.strokeStyle = '#d7dbde'; ctx.lineWidth = 3;
+          ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+        }
+        function dots(ctx, c, pts, col, r, alpha) {
+          ctx.globalAlpha = alpha; ctx.fillStyle = col;
+          for (var i = 0; i < pts.length; i++) {
+            ctx.beginPath(); ctx.arc(px(c, pts[i][0]), py(c, pts[i][1]), r, 0, 6.2832); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+        function arrow(ctx, c, x0, y0, dx, dy, col) {
+          var X = px(c, x0), Y = py(c, y0);
+          var sx = px(c, x0 + dx * 0.22) - X, sy = py(c, y0 + dy * 0.22) - Y;
+          var L = Math.hypot(sx, sy) || 1, ux = sx / L, uy = sy / L;
+          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 3.4;
+          ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X + sx, Y + sy); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(X + sx, Y + sy);
+          ctx.lineTo(X + sx - 11 * ux + 6 * uy, Y + sy - 11 * uy - 6 * ux);
+          ctx.lineTo(X + sx - 11 * ux - 6 * uy, Y + sy - 11 * uy + 6 * ux);
+          ctx.closePath(); ctx.fill();
+        }
+
+        function drawPairs() {
+          frame(ctxP, cvP);
+          dots(ctxP, cvP, data, '#c0392b', 2.6, 0.22);
+          for (var i = 0; i < pairs.length; i++) {
+            var p = pairs[i], t = p.t;
+            var mx = (1 - t) * p.th0[0] + t * p.th1[0];
+            var my = (1 - t) * p.th0[1] + t * p.th1[1];
+            ctxP.strokeStyle = '#b9c2c9'; ctxP.lineWidth = 2; ctxP.setLineDash([7, 5]);
+            ctxP.beginPath();
+            ctxP.moveTo(px(cvP, p.th0[0]), py(cvP, p.th0[1]));
+            ctxP.lineTo(px(cvP, p.th1[0]), py(cvP, p.th1[1]));
+            ctxP.stroke(); ctxP.setLineDash([]);
+            dots(ctxP, cvP, [p.th0], '#7f8c8d', 5, 0.95);
+            dots(ctxP, cvP, [p.th1], '#c0392b', 5.5, 0.95);
+            arrow(ctxP, cvP, mx, my, p.th1[0] - p.th0[0], p.th1[1] - p.th0[1], '#2980b9');
+            dots(ctxP, cvP, [[mx, my]], '#2980b9', 5, 1);
+          }
+        }
+
+        function drawFlow() {
+          frame(ctxF, cvF);
+          dots(ctxF, cvF, data, '#c0392b', 2.6, 0.16);
+          if (document.getElementById('fm-trails').checked) {
+            ctxF.strokeStyle = '#2980b9'; ctxF.globalAlpha = 0.16; ctxF.lineWidth = 1.6;
+            for (var i = 0; i < NCLOUD; i += 3) {
+              var tr = trail[i]; if (tr.length < 2) continue;
+              ctxF.beginPath(); ctxF.moveTo(px(cvF, tr[0][0]), py(cvF, tr[0][1]));
+              for (var k = 1; k < tr.length; k++) ctxF.lineTo(px(cvF, tr[k][0]), py(cvF, tr[k][1]));
+              ctxF.stroke();
+            }
+            ctxF.globalAlpha = 1;
+          }
+          var frac = step / STEPS;
+          var col = 'rgb(' + Math.round(41 + 190 * frac) + ',' +
+                             Math.round(128 - 52 * frac) + ',' +
+                             Math.round(185 - 125 * frac) + ')';
+          dots(ctxF, cvF, cloud, col, 3.4, 0.85);
+        }
+
+        function advance() {
+          if (step >= STEPS) {
+            if (++hold > HOLD) { resetCloud(); newPairs(); }
+            return;
+          }
+          var t = step / STEPS, dt = 1 / STEPS, keep = (step % 3 === 0);
+          for (var i = 0; i < NCLOUD; i++) {
+            velocity(cloud[i][0], cloud[i][1], t + 0.5 * dt, vtmp);
+            if (keep) trail[i].push([cloud[i][0], cloud[i][1]]);
+            cloud[i][0] += vtmp[0] * dt;
+            cloud[i][1] += vtmp[1] * dt;
+          }
+          step++;
+          if (++pairAge > 45) newPairs();
+        }
+
+        function render() {
+          drawPairs(); drawFlow();
+          var t = Math.min(step / STEPS, 1);
+          document.getElementById('fm-t').textContent = t.toFixed(2);
+          document.getElementById('fm-bar').style.width = (100 * t) + '%';
+        }
+
+        function tick() { if (playing) advance(); render(); raf = requestAnimationFrame(tick); }
+        function start() { if (raf === null) raf = requestAnimationFrame(tick); }
+        function stop() { if (raf !== null) { cancelAnimationFrame(raf); raf = null; } }
+
+        // ---------- wiring ----------
+        var btnPlay = document.getElementById('fm-play');
+        var btnTgt = document.getElementById('fm-target');
+        btnPlay.addEventListener('click', function (e) {
+          e.stopPropagation(); playing = !playing;
+          btnPlay.innerHTML = playing ? 'Pause &#10074;&#10074;' : 'Play &#9654;';
+        });
+        btnTgt.addEventListener('click', function (e) {
+          e.stopPropagation();
+          ti = (ti + 1) % TARGETS.length;
+          data = TARGETS[ti].make(NDATA);
+          btnTgt.textContent = 'Target: ' + TARGETS[ti].name;
+          resetCloud(); newPairs(); render();
+        });
+        sec.querySelectorAll('button, label, input').forEach(function (b) {
+          b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+        });
+
+        resetCloud(); newPairs(); render();
+
+        function init() {
+          if (!window.Reveal || !Reveal.on) { return setTimeout(init, 150); }
+          if (Reveal.getCurrentSlide && Reveal.getCurrentSlide() === sec) start();
+          Reveal.on('slidechanged', function (e) {
+            if (e.currentSlide === sec) start(); else stop();
+          });
+          document.addEventListener('visibilitychange', function () {
+            if (document.hidden) stop();
+            else if (Reveal.getCurrentSlide && Reveal.getCurrentSlide() === sec) start();
+          });
+        }
+        if (!window.Reveal) start();
+        window.addEventListener('load', init);
+      })();
+      </script>
+    </section>
+
+    <!-- FM 4 — conditional FM = amortized NPE -->
+    <section>
+      <p class="eyebrow">Foundations of SBI &gt; Flow matching</p>
+      <h2>Conditional flow matching = <em style="font-style:normal; color:#2980b9;">amortized</em> posterior estimation</h2>
+      <p class="subtitle" style="margin-top:0;">One extra input to the velocity field, and a generative model becomes an inference engine.</p>
+
+      <div style="display:flex; gap:24px; margin-top:8px; align-items:flex-start;">
+
+        <div style="flex:1.05; font-size:0.76em; line-height:1.45;">
+          <p style="margin:0 0 4px;">
+            We rarely want <em>one</em> distribution &mdash; we want a <strong>family</strong> indexed by
+            an input. Feed the condition to the field alongside \(\theta\) and \(t\):
+          </p>
+          <div style="text-align:center; margin:2px 0;">
+            \[ \mathcal L(\phi) = \mathbb E_{t,\,\theta_0,\,(\theta,x)}\Big[\;\big\|\,
+               v_\phi\big((1-t)\theta_0 + t\,\theta,\;t \,\big|\, \color{#2980b9}{x}\big)
+               - (\theta-\theta_0)\,\big\|^2\Big] \]
+          </div>
+          <p style="margin:4px 0 0;">
+            with the pairs drawn <strong>jointly</strong> from the simulator,
+            \((\theta,x)\sim p(\theta)\,p(x\mid\theta)\): each training \(\theta\) comes with the
+            \(x\) it produced. Nothing else moves &mdash; in code, it is the <code>cond</code>
+            argument we had been passing as <code>None</code>.
+          </p>
+
+          <div class="box box-blue" style="margin:11px 0 0;">
+            <strong>The minimiser of this loss is the posterior.</strong>
+            \( q_\phi(\theta\mid x) \to p(\theta\mid x) \) &mdash; no likelihood was ever
+            written down, only simulated. This is <strong>Neural Posterior Estimation</strong>,
+            with flow matching as the density estimator.
+          </div>
+
+          <p style="margin:10px 0 0;">
+            And because the network learned the <em>whole family</em> at once, a new observation
+            \(x_{\rm o}\) it has never seen costs one ODE solve, not a new training run:
+            that is <strong>amortization</strong>, and it is the entire reason this machinery
+            is interesting for GW astronomy.
+          </p>
+        </div>
+
+        <div style="flex:0.95;">
+          <div style="background:#2c3e50; border-radius:8px; padding:11px 13px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.6em; color:#95a5a6;
+                        letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">The whole change</div>
+<pre style="margin:0; background:none; box-shadow:none;"><code style="font-size:0.52em; line-height:1.5; color:#ecf0f1; background:none;">theta = prior.sample(N)          <span style="color:#7f8c8d;"># parameters</span>
+x     = simulator(theta)         <span style="color:#7f8c8d;"># data</span>
+
+net   = VelocityNet(d_theta,
+                    <span style="color:#f39c12;">d_cond=d_x</span>)  <span style="color:#7f8c8d;"># &lt;- only edit</span>
+train_fm(net, theta, <span style="color:#f39c12;">cond=x</span>)
+
+<span style="color:#7f8c8d;"># posterior for a new observation:</span>
+post = fm_sample(net, <span style="color:#f39c12;">x_obs</span>, d_theta)</code></pre>
+          </div>
+          <div class="box box-green" style="margin-top:11px; font-size:0.72em;">
+            <strong>Why this scales to LISA.</strong> \(x\) is high-dimensional, so in practice we
+            condition on a learned or linear <em>compression</em> of the data (Part&nbsp;4: PCA), and
+            we focus the prior where the signal lives (<em>sequential</em> SBI, next). The loss
+            never changes.
+          </div>
+        </div>
+      </div>
+    </section>
+
+<section>
+      <p class="eyebrow">Applications &gt; Overview</p>
+      <h2>Application types</h2>
+      <p class="subtitle" style="margin-top:0;">Inference modes and problems SBI handles natively</p>
+
+      <div style="font-size:0.85em; margin-top:30px;">
+
+        <div class="fragment">
+          <p style="font-family:'Space Grotesk',sans-serif;
+                    text-align: left;
+                    font-size:0.72em; font-weight:600;
+                    letter-spacing:0.15em; text-transform:uppercase;
+                    color:#7f8c8d; margin:8px 0 4px;">Foundational</p>
+          <div style="display:grid; grid-template-columns:340px 1fr; row-gap:6px; column-gap:18px; text-align:left;">
+            <div><strong style="color:#2980b9;">Amortized</strong></div>
+            <div>Once trained, instant inference for any new observation</div>
+            <div><strong style="color:#2980b9;">Implicit</strong></div>
+            <div>Models defined only by a simulator, no explicit likelihood required</div>
+          </div>
+        </div>
+
+        <div class="fragment">
+          <p style="font-family:'Space Grotesk',sans-serif;
+                    text-align: left;
+                    font-size:0.72em; font-weight:600;
+                    letter-spacing:0.15em; text-transform:uppercase;
+                    color:#7f8c8d; margin:24px 0 4px;">Handled natively</p>
+          <div style="display:grid; grid-template-columns:340px 1fr; row-gap:6px; column-gap:18px; text-align:left;">
+            <div><strong style="color:#2980b9;">Marginal</strong></div>
+            <div>Inference can focus on parameters of interest, ignore the rest</div>
+            <div><strong style="color:#2980b9;">High-dimensional</strong></div>
+            <div>Inference of millions of parameters at once is possible</div>
+            <div><strong style="color:#2980b9;">Model comparison</strong></div>
+            <div>Classification tasks lead to Bayes factors and hypothesis tests</div>
+          </div>
+        </div>
+
+        <div class="fragment">
+          <p style="font-family:'Space Grotesk',sans-serif;
+                    text-align: left;
+                    font-size:0.72em; font-weight:600;
+                    letter-spacing:0.15em; text-transform:uppercase;
+                    color:#7f8c8d; margin:24px 0 4px;">Underexplored regimes &mdash; what's not yet routine</p>
+          <div style="display:grid; grid-template-columns:340px 1fr; row-gap:6px; column-gap:18px; text-align:left;">
+            <div><strong style="color:#2980b9;">Trans-dimensional</strong></div>
+            <div>Inference for an unknown number of model components</div>
+            <div><strong style="color:#2980b9;">Sequential</strong></div>
+            <div>Targeting simulations on a single observation</div>
+            <div><strong style="color:#2980b9;">Epistemic uncertainties</strong></div>
+            <div>Strategies to catch inference, modeling and precision errors</div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- SBI enables real-time GW science (PDF p27) -->
+    
+
+<section>
+      <p class="eyebrow">Applications &gt; Foundational aspects of SBI</p>
+      <h2>Amortized: SBI enables &ldquo;real-time&rdquo; GW science</h2>
+      <p class="subtitle" style="margin-top:0;">
+        After training, \(q_\phi(\mathbf{z}\mid\mathbf{x})\) provides instant inference results for <em>any</em> observation \(\mathbf{x}\)
+      </p>
+      <div style="text-align:center; margin-top:8px;">
+        <img src="img/p27_body.png" style="max-width:100%; max-height:470px;">
+      </div>
+      <p style="font-size:0.6em; color:#95a0a8; text-align:right; margin:6px 0 0;">
+        See also: Dax et al. 2021 (DINGO) arXiv:2106.12594 &middot; Green &amp; Gair 2020 arXiv:2008.03312</p>
+    </section>
+
+    <!-- LISA: realistic SGWB analysis (from earlier deck, PDF p37) -->
+    
+
+<section>
+      <p class="eyebrow">Applications &gt; Foundational aspects of SBI</p>
+      <h2>Implicit: Towards a realistic analysis of the SGWB</h2>
+      <p class="subtitle" style="margin-top:0;">
+        During the training, the simulator can include any effect we like (e.g. a transient contaminant), 
+        and SBI will marginalise over it at inference time.  Neglecting it instead leads to biased results.  
+      </p>
+
+      <div style="display:flex; gap:14px; margin-top:8px; align-items:stretch;">
+
+        <!-- Left: big corner plot -->
+        <div style="flex:0.8; display:flex; align-items:flex-start; justify-content:flex-start;">
+          <img src="img/p37_corner.png" style="width:100%;">
+        </div>
+
+        <!-- Right: two stacked content blocks -->
+        <div style="flex:1; display:flex; flex-direction:column; gap:10px;">
+
+          <div class="box box-blue">
+            <strong style="color:#2980b9; font-size:0.92em;">Power-law (with stochastic transient)</strong>
+            <ul style="margin:6px 0 0; font-size:0.79em;">
+              <li>In absence of transients, MCMC results are recovered with the same precision</li>
+              <li>In the presence of transients, MCMC is biased when they are neglected (necessary for a tractable likelihood),
+                  while <strong>Saqqara / Swyft</strong> correctly marginalises over them
+                  (if present in the simulation data)</li>
+            </ul>
+          </div>
+
+
+          <p style="font-size:0.7em; color:#7f8c8d; text-align:right; margin:4px 0 0;">Alvey+ arXiv:2309.07954</p>
+
+        </div>
+      </div>
+    </section>
+
+    
+
+<section>
+      <p class="eyebrow">Applications &gt; Native capabilities of SBI</p>
+      <h2>Marginal: Joined analysis of overlapping GW signals</h2>
+      <p class="subtitle" style="margin-top:0;">
+        Instead of training the full posterior $q_\phi(\mathbf{z}_1,
+        \mathbf{z}_2 \mid \mathbf{x})$, we can train a marginal posterior
+        $q_\phi(\mathbf{z}_1 \mid \mathbf{x})$ for the parameters of interest
+        $\mathbf{z}_1$, while marginalising over the nuisance parameters
+        $\mathbf{z}_2$ (e.g. the second overlapping signal), and vice versa.
+      </p>
+      <div style="text-align:center;">
+        <img src="img/snap_p32_body.png" style="max-width:100%; max-height:450px; object-fit:contain;">
+      </div>
+    </section>
+
+    <!-- Field-level inference: high-dimensional q with U-Nets + Gaussian structure -->
+    
+
+<section id="seq-sbi" data-seq-slide>
+      <p class="eyebrow">Applications &gt; Underexplored capabilities of SBI</p>
+      <h2>Sequential SBI &mdash; <em style="font-style:normal; color:#2980b9;">focusing</em> simulations round by round</h2>
+
+      <div style="display:flex; gap:26px; margin-top:6px; align-items:flex-start;">
+
+        <!-- ============ LEFT : the explanation ============ -->
+        <div style="flex:1; font-size:0.74em; line-height:1.4;">
+          <p style="margin:0 0 8px;">
+            We want the posterior \(p(\theta\mid x_o)\) for a <strong>single target
+            observation</strong> \(x_o\) (right, fixed). Simulating across the
+            <em>whole</em> prior wastes most of the budget on \(\theta\) that could
+            never produce \(x_o\).
+          </p>
+
+          <p style="margin:8px 0 4px;"><strong>The loop:</strong></p>
+          <ol style="margin:0; padding-left:1.2em;">
+            <li><strong>Simulate.</strong> Draw \(\theta\) from the current proposal,
+                run the simulator to get \(x\) (top training panel flickers through
+                fresh realisations).</li>
+            <li><strong>Learn.</strong> Fit the posterior on \((\theta,x)\) pairs &mdash;
+                the <span style="color:#2980b9;">ellipse</span> is the new estimate
+                given this round's points.</li>
+            <li><strong>Focus.</strong> Use that ellipse as the next proposal, so the
+                next round only simulates where it matters.</li>
+          </ol>
+
+          <p style="margin:10px 0 0;">
+            Each round the cloud tightens around the truth and the simulated rings
+            start to <em>resemble the target</em>. A few rounds buy the accuracy a
+            fixed budget could never reach.
+          </p>
+
+          <div style="margin-top:14px; display:flex; align-items:center; gap:12px;">
+            <button id="seq-next"
+              style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:0.95em;
+                     color:#fff; background:#2980b9; border:none; border-radius:7px;
+                     padding:9px 16px; cursor:pointer;">Next round &#9654;</button>
+            <button id="seq-reset"
+              style="font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:0.9em;
+                     color:#34495e; background:#ecf0f1; border:none; border-radius:7px;
+                     padding:9px 14px; cursor:pointer;">Reset &#8634;</button>
+            <span id="seq-round" style="font-weight:600; color:#34495e;">Round 0</span>
+          </div>
+          <p style="margin:8px 0 0; font-size:0.82em; color:#7f8c8d; font-style:italic;">
+            Toy model: ring position encodes \((\theta_1,\theta_2)\); the simulator
+            adds noise. Ellipses are illustrative, not a real fit.
+          </p>
+          <p style="margin:6px 0 0; font-size:0.66em; color:#95a0a8;">
+            See also: Papamakarios, Sterratt &amp; Murray 2019 (SNL) arXiv:1805.07226 &middot;
+            Deistler, Gon&ccedil;alves &amp; Macke 2022 arXiv:2210.04815
+          </p>
+        </div>
+
+        <!-- ============ RIGHT : the figures ============ -->
+        <div style="flex:1.05; display:flex; flex-direction:column; gap:10px;">
+
+          <!-- top row: parameter-space scatter + shrinking ellipses -->
+          <div style="background:#fff; border:1px solid #e5e8ea; border-radius:8px; padding:6px 8px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                        font-size:0.62em; color:#34495e; margin:0 0 2px 4px;">
+              Parameter space &nbsp;&middot;&nbsp; samples + learned posterior
+            </div>
+            <svg id="seq-scatter" viewBox="0 0 320 300" style="width:auto; max-width:100%; max-height:300px; display:block; margin:0 auto;"
+                 xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+              <!-- frame -->
+              <rect x="40" y="14" width="262" height="248" fill="#fbfcfd" stroke="#d7dbde" stroke-width="1"/>
+              <!-- gridlines -->
+              <g stroke="#eef1f3" stroke-width="1">
+                <line x1="105.5" y1="14" x2="105.5" y2="262"/>
+                <line x1="171"   y1="14" x2="171"   y2="262"/>
+                <line x1="236.5" y1="14" x2="236.5" y2="262"/>
+                <line x1="40" y1="76"  x2="302" y2="76"/>
+                <line x1="40" y1="138" x2="302" y2="138"/>
+                <line x1="40" y1="200" x2="302" y2="200"/>
+              </g>
+              <!-- axes labels -->
+              <text x="171" y="284" text-anchor="middle" fill="#7f8c8d" font-size="13">&theta;&#8321;</text>
+              <text x="18" y="142" text-anchor="middle" fill="#7f8c8d" font-size="13"
+                    transform="rotate(-90 18 142)">&theta;&#8322;</text>
+              <!-- dynamic content -->
+              <g id="seq-pts"></g>
+              <g id="seq-ellipses" fill="none" stroke-width="2.2"></g>
+              <!-- truth marker -->
+              <g id="seq-truth"></g>
+              <!-- legend -->
+              <g id="seq-legend" font-size="11" fill="#566069"></g>
+            </svg>
+          </div>
+
+          <!-- bottom row: training data (flickering) | target data (fixed) -->
+          <div style="display:flex; gap:10px;">
+            <div style="flex:1; text-align:center;">
+              <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                          font-size:0.6em; color:#2980b9; margin-bottom:3px;">
+                Training data &nbsp;<span style="color:#95a0a8; font-weight:500;">x &sim; p(x|&theta;), &theta; &sim; proposal</span>
+              </div>
+              <canvas id="seq-train" width="150" height="150"
+                      style="width:100%; max-width:170px; border-radius:6px; image-rendering:pixelated;"></canvas>
+            </div>
+            <div style="flex:1; text-align:center;">
+              <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                          font-size:0.6em; color:#34495e; margin-bottom:3px;">
+                Target observation &nbsp;<span style="color:#95a0a8; font-weight:500;">x&#8338; (fixed)</span>
+              </div>
+              <canvas id="seq-target" width="150" height="150"
+                      style="width:100%; max-width:170px; border-radius:6px; image-rendering:pixelated;"></canvas>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ===== self-contained driver (travels with this section) ===== -->
+      <script>
+      (function () {
+        var sec = document.getElementById('seq-sbi');
+        if (!sec) return;
+
+        // ---------- geometry of the scatter panel ----------
+        var FX0 = 40, FY0 = 14, FW = 262, FH = 248;     // frame box
+        var RNG = 3.0;                                   // theta plotted on [-RNG, RNG]
+        function sx(t) { return FX0 + (t / RNG + 1) / 2 * FW; }
+        function sy(t) { return FY0 + (1 - (t / RNG + 1) / 2) * FH; }
+        var SCL = (FW / 2) / RNG;                         // theta -> px (x); y is same magnitude
+
+        // ---------- the toy "experiment" ----------
+        var TRUTH = [0.7, -0.55];
+        var ROUND_COL = ['#9aa3ab', '#3b6fd6', '#e8932f', '#2ea44f', '#7d3cc0'];
+        var MAX_ROUND = 4;
+
+        // ---------- rng helpers ----------
+        function gauss() {
+          var u = 0, v = 0;
+          while (u === 0) u = Math.random();
+          while (v === 0) v = Math.random();
+          return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+        }
+        // sample from N(mean, cov) with cov = [[a,b],[b,c]] via Cholesky
+        function sampleCov(mean, cov) {
+          var a = cov[0], b = cov[1], c = cov[2];
+          var l11 = Math.sqrt(a);
+          var l21 = b / l11;
+          var l22 = Math.sqrt(Math.max(c - l21 * l21, 1e-9));
+          var z1 = gauss(), z2 = gauss();
+          return [mean[0] + l11 * z1, mean[1] + l21 * z1 + l22 * z2];
+        }
+        // eigen-decomposition of symmetric 2x2 -> {l1,l2,phi}
+        function eig(cov) {
+          var a = cov[0], b = cov[1], c = cov[2];
+          var tr = (a + c) / 2, d = Math.sqrt(((a - c) / 2) * ((a - c) / 2) + b * b);
+          return { l1: tr + d, l2: Math.max(tr - d, 1e-9), phi: 0.5 * Math.atan2(2 * b, a - c) };
+        }
+
+        // ---------- state ----------
+        var ptsG = document.getElementById('seq-pts');
+        var ellG = document.getElementById('seq-ellipses');
+        var truthG = document.getElementById('seq-truth');
+        var legG = document.getElementById('seq-legend');
+        var roundLbl = document.getElementById('seq-round');
+
+        var proposal, round, curProp; // curProp = proposal currently used for training rings
+
+        function reset() {
+          proposal = { mean: [0, 0], cov: [2.0, 0.0, 2.0] }; // wide prior
+          round = 0;
+          curProp = proposal;
+          ptsG.innerHTML = '';
+          ellG.innerHTML = '';
+          legG.innerHTML = '';
+          drawTruth();
+          doRound();           // render round 0 immediately
+          document.getElementById('seq-next').disabled = false;
+          document.getElementById('seq-next').style.opacity = '1';
+        }
+
+        function el(tag, attrs) {
+          var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+          for (var k in attrs) e.setAttribute(k, attrs[k]);
+          return e;
+        }
+
+        function drawTruth() {
+          truthG.innerHTML = '';
+          var x = sx(TRUTH[0]), y = sy(TRUTH[1]);
+          truthG.appendChild(el('line', { x1: x - 7, y1: y, x2: x + 7, y2: y, stroke: '#e8302a', 'stroke-width': 2.2 }));
+          truthG.appendChild(el('line', { x1: x, y1: y - 7, x2: x, y2: y + 7, stroke: '#e8302a', 'stroke-width': 2.2 }));
+        }
+
+        function drawLegend() {
+          legG.innerHTML = '';
+          for (var r = 0; r <= round; r++) {
+            var ly = 26 + r * 15;
+            legG.appendChild(el('circle', { cx: 56, cy: ly - 3, r: 3.4, fill: ROUND_COL[r] }));
+            var t = el('text', { x: 64, y: ly }); t.textContent = 'Round ' + r;
+            legG.appendChild(t);
+          }
+        }
+
+        function doRound() {
+          var col = ROUND_COL[round];
+          // 1) draw this round's samples from the current proposal
+          var n = round === 0 ? 110 : 80;
+          for (var i = 0; i < n; i++) {
+            var s = sampleCov(proposal.mean, proposal.cov);
+            ptsG.appendChild(el('circle', {
+              cx: sx(s[0]).toFixed(1), cy: sy(s[1]).toFixed(1), r: 2.1,
+              fill: col, 'fill-opacity': 0.55
+            }));
+          }
+          // 2) "learn" the posterior: pull toward truth, shrink covariance
+          var learnedMean = [
+            proposal.mean[0] + (TRUTH[0] - proposal.mean[0]) * 0.62,
+            proposal.mean[1] + (TRUTH[1] - proposal.mean[1]) * 0.62
+          ];
+          var shrink = 0.42;
+          var corr = 0.18 * (round % 2 === 0 ? 1 : -1);
+          var a = proposal.cov[0] * shrink, c = proposal.cov[2] * shrink;
+          var b = corr * Math.sqrt(a * c);
+          var learnedCov = [a, b, c];
+          // final round: tighten 3x more (variance /9) so the simulated rings settle
+          if (round === MAX_ROUND) learnedCov = [learnedCov[0] / 9, learnedCov[1] / 9, learnedCov[2] / 9];
+          // 3) draw the learned ellipse (solid = current, dashed = past)
+          var e = eig(learnedCov);
+          var rx = 2 * Math.sqrt(e.l1) * SCL, ry = 2 * Math.sqrt(e.l2) * SCL;
+          var cx = sx(learnedMean[0]), cy = sy(learnedMean[1]);
+          var ell = el('ellipse', {
+            cx: cx, cy: cy, rx: rx.toFixed(1), ry: ry.toFixed(1),
+            transform: 'rotate(' + (-e.phi * 180 / Math.PI).toFixed(1) + ' ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')',
+            stroke: col, 'stroke-opacity': 0.95
+          });
+          ellG.appendChild(ell);
+          // fade previously-current ellipses
+          var prev = ellG.querySelectorAll('ellipse');
+          for (var j = 0; j < prev.length - 1; j++) {
+            prev[j].setAttribute('stroke-opacity', '0.35');
+            prev[j].setAttribute('stroke-dasharray', '4 3');
+          }
+          // the learned posterior becomes the next proposal + the training proposal
+          proposal = { mean: learnedMean, cov: learnedCov };
+          curProp = proposal;
+          roundLbl.textContent = 'Round ' + round;
+          drawLegend();
+        }
+
+        function nextRound() {
+          if (round >= MAX_ROUND) return;
+          round++;
+          doRound();
+          if (round >= MAX_ROUND) {
+            var b = document.getElementById('seq-next');
+            b.disabled = true; b.style.opacity = '0.45';
+          }
+        }
+
+        // ---------- ring renderer (viridis) ----------
+        function viridis(t) {
+          var s = [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          var x = t * (s.length - 1), i = Math.floor(x), f = x - i;
+          var p = s[i], q = s[Math.min(i + 1, s.length - 1)];
+          return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, p[2] + (q[2] - p[2]) * f];
+        }
+        // render an Einstein-ring-like image; theta = [t1,t2] offsets the ring
+        function renderRing(canvas, theta, noiseAmp) {
+          var N = canvas.width, ctx = canvas.getContext('2d');
+          var img = ctx.createImageData(N, N), d = img.data;
+          var cx = N / 2 + theta[0] / RNG * N * 0.16;
+          var cy = N / 2 - theta[1] / RNG * N * 0.16;
+          var R = N * 0.30, sig = N * 0.055;
+          // phase of the four bright images rotates a little with theta
+          var ph = (theta[0] + theta[1]) * 0.6;
+          for (var y = 0; y < N; y++) {
+            for (var x = 0; x < N; x++) {
+              var dx = x - cx, dy = y - cy, r = Math.sqrt(dx * dx + dy * dy);
+              var ring = Math.exp(-((r - R) * (r - R)) / (2 * sig * sig));
+              var ang = Math.atan2(dy, dx);
+              var arc = 0.35 + 0.95 * Math.pow(Math.max(0, Math.cos(2 * (ang - ph))), 6);
+              var v = ring * arc * 0.95 + 0.04;
+              v += (Math.random() - 0.5) * 2 * noiseAmp;
+              var c = viridis(v), o = (y * N + x) * 4;
+              d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+            }
+          }
+          ctx.putImageData(img, 0, 0);
+        }
+
+        var targetC = document.getElementById('seq-target');
+        var trainC = document.getElementById('seq-train');
+        function drawTarget() { renderRing(targetC, TRUTH, 0.05); }
+
+        // ---------- 3 Hz training flicker ----------
+        var flicker = null;
+        function startFlicker() {
+          if (flicker) return;
+          flicker = setInterval(function () {
+            var th = sampleCov(curProp.mean, curProp.cov);
+            renderRing(trainC, th, 0.10);
+          }, 333);
+        }
+        function stopFlicker() { if (flicker) { clearInterval(flicker); flicker = null; } }
+
+        // ---------- wiring ----------
+        document.getElementById('seq-next').addEventListener('click', function (ev) { ev.stopPropagation(); nextRound(); });
+        document.getElementById('seq-reset').addEventListener('click', function (ev) { ev.stopPropagation(); reset(); });
+        // don't let clicks on the buttons advance the slide
+        sec.querySelectorAll('button').forEach(function (b) {
+          b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+        });
+
+        reset();
+        drawTarget();
+
+        function init() {
+          if (!window.Reveal || !Reveal.on) { return setTimeout(init, 150); }
+          var cur = Reveal.getCurrentSlide ? Reveal.getCurrentSlide() : null;
+          if (cur === sec) startFlicker();
+          Reveal.on('slidechanged', function (e) {
+            if (e.currentSlide === sec) startFlicker(); else stopFlicker();
+          });
+          document.addEventListener('visibilitychange', function () {
+            if (document.hidden) stopFlicker();
+            else if (Reveal.getCurrentSlide && Reveal.getCurrentSlide() === sec) startFlicker();
+          });
+        }
+        window.addEventListener('load', init);
+      })();
+      </script>
+    </section>
+
+    <!-- EMRIs intro (from Nikhef Colloquium PDF p33) -->
+    
+
+<section>
+      <p class="eyebrow">Applications &gt; Underexplored capabilities of SBI</p>
+      <h2>Sequential: Future precision probes for gravity &amp; BH environment</h2>
+
+      <div style="display:flex; gap:14px; margin-top:0px; align-items:stretch;">
+
+        <!-- Left: orbits figure + bullets -->
+        <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+          <div style="text-align:center;">
+            <img src="img/p33_orbits.png" style="width:50%; max-width:340px;">
+            <p style="font-size:0.6em; color:#7f8c8d; margin:0;">arXiv:1903.03686</p>
+          </div>
+          <ul style="margin:4px 0 0; font-size:0.75em;">
+            <li>LISA is expected to observe \(\mathcal{O}(10\text{--}100)\) of these sources</li>
+            <li>Precise tests of <strong>strong-field gravity</strong></li>
+            <li>Long-lived, complex waveforms</li>
+            <li>Parameter inference is <em>unsolved</em>, even in idealised settings</li>
+          </ul>
+        </div>
+
+        <!-- Right: waveform figure -->
+        <div style="flex:1.3; display:flex; flex-direction:column;">
+          <img src="img/p33_waveform.png" style="width:100%;">
+          <p style="font-size:0.7em; color:#7f8c8d; text-align:right; margin:4px 0 0;">
+            Cole, Alvey, Speri, CW, Bhardwaj, Gerosa, Bertone &mdash; arXiv:2505.16795
+          </p>
+          <p style="font-size:0.58em; color:#95a0a8; text-align:right; margin:2px 0 0;">
+            See also: Katz et al. 2021 (FastEMRIWaveforms) arXiv:2104.04582</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- EMRIs — non-local degeneracies (PDF p34) -->
+    
+
+<section>
+      <p class="eyebrow">Applications &gt; Underexplored capabilities of SBI</p>
+      <h2>Sequential: Non-local parameter degeneracies</h2>
+      <div style="text-align:center; margin-top:8px;">
+        <img src="img/p34_body.png" style="max-width:100%; max-height:560px;">
+      </div>
+      <p style="font-size:0.7em; color:#7f8c8d; text-align:right; margin:4px 0 0;">Chua &amp; Cutler, 2023</p>
+    </section>
+
+    <!-- Vertical stack: peregrine result (top) + MCMC comparison (backup, press down) -->
+    
+
+<section>
+    <!-- EMRIs — sequential SBI with peregrine (PDF p35) -->
+    <section>
+      <p class="eyebrow">Applications &gt; Underexplored capabilities of SBI</p>
+      <h2>Sequential: Sequential SBI with <em>peregrine</em></h2>
+      <div style="text-align:center; margin-top:8px;">
+        <img src="img/p35_grid.png" style="max-width:100%; max-height:490px;">
+      </div>
+      <p style="font-size:0.7em; color:#7f8c8d; text-align:right; margin:4px 0 0;">
+        Cole, Alvey, Speri, CW, Bhardwaj, Gerosa, Bertone &mdash; arXiv:2505.16795
+      </p>
+      <p style="font-size:0.58em; color:#95a0a8; text-align:right; margin:2px 0 0;">
+        See also: Miller et al. 2021 (TMNRE) arXiv:2107.01214 &middot; Bhardwaj et al. 2023 (peregrine) arXiv:2304.02035</p>
+    </section>
+
+    <!-- EMRIs — comparison with MCMC (PDF p36) -->
+    <section>
+      <p class="eyebrow">Applications &gt; Underexplored capabilities of SBI</p>
+      <h2>Sequential: Comparison with MCMC using the same number of simulations</h2>
+      <div style="text-align:center; margin-top:8px;">
+        <img src="img/p36_grid.png" style="max-width:100%; max-height:520px;">
+      </div>
+      <p style="font-size:0.7em; color:#7f8c8d; text-align:right; margin:4px 0 0;">
+        Cole, Alvey, Speri, CW, Bhardwaj, Gerosa, Bertone &mdash; arXiv:2505.16795
+      </p>
+    </section>
+    </section>
+
+
+    <!-- ============================================================ -->
+    <!-- SECTION 4                                                    -->
+    <!-- ============================================================ -->
+    
+
+<section class="section-slide">
+      <div class="stack">
+        <div class="grad-bar"></div>
+        <h1>Vision</h1>
+        <p>Towards Inferring Everything Everywhere All At Once</p>
+        <div class="grad-bar below"></div>
+      </div>
+    </section>
+
+    
+
+<section id="dyn-sbi" data-dyn-slide>
+      <p class="eyebrow">Vision &gt; Dynamic SBI &nbsp;&middot;&nbsp; arXiv:2510.13997</p>
+      <h2>Dynamic SBI &mdash; <em style="font-style:normal; color:#7d3cc0;">dissolving</em> the rounds into one continuous flow</h2>
+
+      <div style="display:flex; gap:26px; margin-top:6px; align-items:flex-start;">
+
+        <!-- ============ LEFT : the explanation ============ -->
+        <div style="flex:1; font-size:0.74em; line-height:1.4;">
+          <p style="margin:0 0 8px;">
+            Sequential SBI still <em>waits</em>: simulate a whole round, then train,
+            then re-focus, then repeat. Workers sit idle while the network catches up.
+            <strong>Dynamic SBI removes the rounds entirely.</strong>
+          </p>
+
+          <p style="margin:8px 0 4px;"><strong>Everything runs at once:</strong></p>
+          <ul style="margin:0; padding-left:1.2em;">
+            <li><strong style="color:#3b6fd6;">Simulators</strong> never stop &mdash; a swarm
+                draws \(\theta\) and runs \(x\sim p(x\mid\theta)\) continuously.</li>
+            <li><strong style="color:#7d3cc0;">The network</strong> trains in parallel on the
+                <em>live</em> dataset, updating every moment, not once per round.</li>
+            <li><strong style="color:#e8302a;">It filters</strong> &mdash; any sim falling
+                <em>outside the current proposal ellipse</em> is culled the instant it
+                appears (red &times;).</li>
+            <li><strong style="color:#2ea44f;">It proposes</strong> &mdash; the ellipse itself
+                drifts to the truth and <em>shrinks</em>, so points keep dropping out at its
+                contracting edge.</li>
+          </ul>
+
+          <div style="margin-top:14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <button id="dyn-toggle"
+              style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:0.95em;
+                     color:#fff; background:#7d3cc0; border:none; border-radius:7px;
+                     padding:9px 16px; cursor:pointer;">&#10073;&#10073; Pause</button>
+            <button id="dyn-reset"
+              style="font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:0.9em;
+                     color:#34495e; background:#ecf0f1; border:none; border-radius:7px;
+                     padding:9px 14px; cursor:pointer;">Reset &#8634;</button>
+            <span style="font-weight:600; color:#34495e; font-size:0.85em;">
+              sims <span id="dyn-nsim">0</span>
+              &nbsp;&middot;&nbsp; <span style="color:#2ea44f;">inside <span id="dyn-nkeep">0</span></span>
+              &nbsp;&middot;&nbsp; <span style="color:#e8302a;">culled <span id="dyn-ncull">0</span></span>
+            </span>
+          </div>
+          <p style="margin:8px 0 0; font-size:0.82em; color:#7f8c8d; font-style:italic;">
+            Same toy model as the previous slide &mdash; but here nothing waits for a round
+            to end. The cloud, the proposal, and the simulated rings all evolve at once.
+          </p>
+        </div>
+
+        <!-- ============ RIGHT : the figures ============ -->
+        <div style="flex:1.05; display:flex; flex-direction:column; gap:10px;">
+
+          <!-- top row: parameter-space, live evolving cloud -->
+          <div style="background:#fff; border:1px solid #e5e8ea; border-radius:8px; padding:6px 8px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                        font-size:0.62em; color:#34495e; margin:0 0 2px 4px; display:flex; justify-content:space-between;">
+              <span>Parameter space &nbsp;&middot;&nbsp; one live, evolving dataset</span>
+              <span id="dyn-live" style="color:#2ea44f;">&#9679; running</span>
+            </div>
+            <svg id="dyn-scatter" viewBox="0 0 320 300" style="width:auto; max-width:100%; max-height:300px; display:block; margin:0 auto;"
+                 xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+              <!-- frame -->
+              <rect x="40" y="14" width="262" height="248" fill="#fbfcfd" stroke="#d7dbde" stroke-width="1"/>
+              <!-- gridlines -->
+              <g stroke="#eef1f3" stroke-width="1">
+                <line x1="105.5" y1="14" x2="105.5" y2="262"/>
+                <line x1="171"   y1="14" x2="171"   y2="262"/>
+                <line x1="236.5" y1="14" x2="236.5" y2="262"/>
+                <line x1="40" y1="76"  x2="302" y2="76"/>
+                <line x1="40" y1="138" x2="302" y2="138"/>
+                <line x1="40" y1="200" x2="302" y2="200"/>
+              </g>
+              <!-- axes labels -->
+              <text x="171" y="284" text-anchor="middle" fill="#7f8c8d" font-size="13">&theta;&#8321;</text>
+              <text x="18" y="142" text-anchor="middle" fill="#7f8c8d" font-size="13"
+                    transform="rotate(-90 18 142)">&theta;&#8322;</text>
+              <!-- dynamic content -->
+              <g id="dyn-pts"></g>
+              <g id="dyn-ellipse" fill="none" stroke="#7d3cc0" stroke-width="2.4"></g>
+              <!-- truth marker -->
+              <g id="dyn-truth"></g>
+            </svg>
+          </div>
+
+          <!-- bottom row: live training data (continuously sharpening) | target (fixed) -->
+          <div style="display:flex; gap:10px;">
+            <div style="flex:1; text-align:center;">
+              <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                          font-size:0.6em; color:#7d3cc0; margin-bottom:3px;">
+                Adaptive dataset &nbsp;<span style="color:#95a0a8; font-weight:500;">evolving toward x&#8338;</span>
+              </div>
+              <canvas id="dyn-train" width="150" height="150"
+                      style="width:100%; max-width:170px; border-radius:6px; image-rendering:pixelated;"></canvas>
+            </div>
+            <div style="flex:1; text-align:center;">
+              <div style="font-family:'Space Grotesk',sans-serif; font-weight:700;
+                          font-size:0.6em; color:#34495e; margin-bottom:3px;">
+                Target observation &nbsp;<span style="color:#95a0a8; font-weight:500;">x&#8338; (fixed)</span>
+              </div>
+              <canvas id="dyn-target" width="150" height="150"
+                      style="width:100%; max-width:170px; border-radius:6px; image-rendering:pixelated;"></canvas>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ===== self-contained driver (travels with this section) ===== -->
+      <script>
+      (function () {
+        var sec = document.getElementById('dyn-sbi');
+        if (!sec) return;
+
+        // ---------- geometry of the scatter panel ----------
+        var FX0 = 40, FY0 = 14, FW = 262, FH = 248;
+        var RNG = 3.0;
+        function sx(t) { return FX0 + (t / RNG + 1) / 2 * FW; }
+        function sy(t) { return FY0 + (1 - (t / RNG + 1) / 2) * FH; }
+        var SCL = (FW / 2) / RNG;
+
+        // ---------- the toy "experiment" ----------
+        var TRUTH = [0.7, -0.55];
+
+        // ---------- rng helpers ----------
+        function gauss() {
+          var u = 0, v = 0;
+          while (u === 0) u = Math.random();
+          while (v === 0) v = Math.random();
+          return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+        }
+        function sampleCov(mean, cov) {
+          var a = cov[0], b = cov[1], c = cov[2];
+          var l11 = Math.sqrt(Math.max(a, 1e-9));
+          var l21 = b / l11;
+          var l22 = Math.sqrt(Math.max(c - l21 * l21, 1e-9));
+          var z1 = gauss(), z2 = gauss();
+          return [mean[0] + l11 * z1, mean[1] + l21 * z1 + l22 * z2];
+        }
+        function eig(cov) {
+          var a = cov[0], b = cov[1], c = cov[2];
+          var tr = (a + c) / 2, d = Math.sqrt(((a - c) / 2) * ((a - c) / 2) + b * b);
+          return { l1: tr + d, l2: Math.max(tr - d, 1e-9), phi: 0.5 * Math.atan2(2 * b, a - c) };
+        }
+
+        function el(tag, attrs) {
+          var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+          for (var k in attrs) e.setAttribute(k, attrs[k]);
+          return e;
+        }
+
+        // ---------- DOM handles ----------
+        var ptsG = document.getElementById('dyn-pts');
+        var ellG = document.getElementById('dyn-ellipse');
+        var truthG = document.getElementById('dyn-truth');
+        var nsimEl = document.getElementById('dyn-nsim');
+        var nkeepEl = document.getElementById('dyn-nkeep');
+        var ncullEl = document.getElementById('dyn-ncull');
+        var liveEl = document.getElementById('dyn-live');
+
+        // ---------- state ----------
+        var parts;          // live particles
+        var est;            // running proposal estimate {mean, cov}
+        var nSim, nKeep, nCull;
+        var running = true;
+        var CAP = 150;           // max live particles inside the ellipse
+        var DIE = 320;           // ms a culled particle lingers (red flash)
+        var MAHA = 2.0;          // ellipse boundary = 2-sigma (matches the drawn ellipse)
+        var COV_FLOOR = [0.04 / 9, 0.012 / 9, 0.05 / 9];  // final, converged ellipse (3x smaller → rings settle)
+
+        function reset() {
+          parts = [];
+          est = { mean: [0, 0], cov: [2.0, 0.0, 2.0] };  // wide prior
+          nSim = 0; nKeep = 0; nCull = 0;
+          spawnAcc = 0; ringAcc = 0;
+          ptsG.innerHTML = '';
+          drawTruth();
+          updateCounters();
+        }
+
+        function drawTruth() {
+          truthG.innerHTML = '';
+          var x = sx(TRUTH[0]), y = sy(TRUTH[1]);
+          truthG.appendChild(el('line', { x1: x - 7, y1: y, x2: x + 7, y2: y, stroke: '#e8302a', 'stroke-width': 2.2 }));
+          truthG.appendChild(el('line', { x1: x, y1: y - 7, x2: x, y2: y + 7, stroke: '#e8302a', 'stroke-width': 2.2 }));
+        }
+
+        function updateCounters() {
+          var live = 0;
+          for (var i = 0; i < parts.length; i++) if (parts[i].state === 'live') live++;
+          nsimEl.textContent = nSim;
+          nkeepEl.textContent = live;
+          ncullEl.textContent = nCull;
+        }
+
+        // ---------- ellipse membership ----------
+        // Mahalanobis^2 of point p w.r.t. the current ellipse (mean, cov)
+        function maha2(p) {
+          var a = est.cov[0], b = est.cov[1], c = est.cov[2];
+          var det = a * c - b * b; if (det < 1e-9) det = 1e-9;
+          var dx = p[0] - est.mean[0], dy = p[1] - est.mean[1];
+          var ix = (c * dx - b * dy) / det, iy = (-b * dx + a * dy) / det; // inv(cov)*(dx,dy)
+          return dx * ix + dy * iy;
+        }
+        function inside(p) { return maha2(p) <= MAHA * MAHA; }
+
+        // ---------- one simulation event ----------
+        function spawn() {
+          // draw from an inflated ellipse so a halo always lands just OUTSIDE
+          var inflate = 1.7;
+          var pcov = [est.cov[0] * inflate, est.cov[1] * inflate, est.cov[2] * inflate];
+          var s = sampleCov(est.mean, pcov);
+          nSim++;
+          if (inside(s)) {
+            parts.push({ p: s, state: 'live', age: 0 });
+          } else {
+            parts.push({ p: s, state: 'dying', age: 0 });
+            nCull++;
+          }
+        }
+
+        // ---------- the network "learns": ellipse drifts to truth and shrinks ----------
+        function scheduleEllipse(dt) {
+          var km = 1 - Math.exp(-dt / 1400);   // mean approach rate
+          var kc = 1 - Math.exp(-dt / 1900);   // covariance shrink rate
+          est.mean[0] += (TRUTH[0] - est.mean[0]) * km;
+          est.mean[1] += (TRUTH[1] - est.mean[1]) * km;
+          est.cov[0] += (COV_FLOOR[0] - est.cov[0]) * kc;
+          est.cov[1] += (COV_FLOOR[1] - est.cov[1]) * kc;
+          est.cov[2] += (COV_FLOOR[2] - est.cov[2]) * kc;
+        }
+
+        // ---------- render particle cloud + posterior ellipse ----------
+        function renderCloud() {
+          var html = '';
+          for (var i = 0; i < parts.length; i++) {
+            var pt = parts[i];
+            var x = sx(pt.p[0]).toFixed(1), y = sy(pt.p[1]).toFixed(1);
+            if (pt.state === 'dying') {
+              var fade = Math.max(0, 1 - pt.age / DIE);
+              var rr = (2.0 + 1.4 * (pt.age / DIE)).toFixed(1);
+              html += '<g stroke="#e8302a" stroke-width="1.6" opacity="' + (fade * 0.85).toFixed(2) + '">' +
+                      '<line x1="' + (x - rr) + '" y1="' + (y - rr) + '" x2="' + (+x + +rr) + '" y2="' + (+y + +rr) + '"/>' +
+                      '<line x1="' + (x - rr) + '" y1="' + (+y + +rr) + '" x2="' + (+x + +rr) + '" y2="' + (y - rr) + '"/></g>';
+            } else {
+              var op = Math.min(1, pt.age / 160);   // gentle fade-in
+              html += '<circle cx="' + x + '" cy="' + y + '" r="2.2" fill="#3b6fd6" fill-opacity="' + (0.55 * op).toFixed(2) + '"/>';
+            }
+          }
+          ptsG.innerHTML = html;
+
+          // live posterior ellipse (2-sigma) from the running estimate
+          var e = eig(est.cov);
+          var rx = 2 * Math.sqrt(e.l1) * SCL, ry = 2 * Math.sqrt(e.l2) * SCL;
+          var cx = sx(est.mean[0]), cy = sy(est.mean[1]);
+          ellG.innerHTML = '';
+          ellG.appendChild(el('ellipse', {
+            cx: cx, cy: cy, rx: rx.toFixed(1), ry: ry.toFixed(1),
+            transform: 'rotate(' + (-e.phi * 180 / Math.PI).toFixed(1) + ' ' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ')'
+          }));
+        }
+
+        // ---------- ring renderer (viridis) ----------
+        function viridis(t) {
+          var s = [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          var x = t * (s.length - 1), i = Math.floor(x), f = x - i;
+          var p = s[i], q = s[Math.min(i + 1, s.length - 1)];
+          return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, p[2] + (q[2] - p[2]) * f];
+        }
+        function renderRing(canvas, theta, noiseAmp) {
+          var N = canvas.width, ctx = canvas.getContext('2d');
+          var img = ctx.createImageData(N, N), d = img.data;
+          var cx = N / 2 + theta[0] / RNG * N * 0.16;
+          var cy = N / 2 - theta[1] / RNG * N * 0.16;
+          var R = N * 0.30, sig = N * 0.055;
+          var ph = (theta[0] + theta[1]) * 0.6;
+          for (var y = 0; y < N; y++) {
+            for (var x = 0; x < N; x++) {
+              var dx = x - cx, dy = y - cy, r = Math.sqrt(dx * dx + dy * dy);
+              var ring = Math.exp(-((r - R) * (r - R)) / (2 * sig * sig));
+              var ang = Math.atan2(dy, dx);
+              var arc = 0.35 + 0.95 * Math.pow(Math.max(0, Math.cos(2 * (ang - ph))), 6);
+              var v = ring * arc * 0.95 + 0.04;
+              v += (Math.random() - 0.5) * 2 * noiseAmp;
+              var c = viridis(v), o = (y * N + x) * 4;
+              d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+            }
+          }
+          ctx.putImageData(img, 0, 0);
+        }
+
+        var targetC = document.getElementById('dyn-target');
+        var trainC = document.getElementById('dyn-train');
+        function drawTarget() { renderRing(targetC, TRUTH, 0.05); }
+
+        // ---------- main loop ----------
+        var spawnAcc = 0, ringAcc = 0, last = 0;
+        function frame(ts) {
+          if (!last) last = ts;
+          var dt = Math.min(80, ts - last);
+          last = ts;
+          if (running) {
+            // 1) the network learns: ellipse drifts to truth and shrinks
+            scheduleEllipse(dt);
+
+            // 2) any LIVE point now OUTSIDE the shrunken ellipse is culled (red)
+            for (var i = 0; i < parts.length; i++) {
+              if (parts[i].state === 'live' && !inside(parts[i].p)) {
+                parts[i].state = 'dying'; parts[i].age = 0; nCull++;
+              }
+            }
+
+            // 3) age dying points; drop them once the red flash fades
+            var keep = [];
+            for (var k = 0; k < parts.length; k++) {
+              parts[k].age += dt;
+              if (parts[k].state === 'dying') { if (parts[k].age < DIE) keep.push(parts[k]); }
+              else keep.push(parts[k]);
+            }
+            parts = keep;
+
+            // 4) simulators never stop: spawn at a steady rate (capped live count)
+            spawnAcc += dt;
+            var interval = 24;   // ms between sim events
+            while (spawnAcc > interval) {
+              spawnAcc -= interval;
+              var liveCount = 0;
+              for (var j = 0; j < parts.length; j++) if (parts[j].state === 'live') liveCount++;
+              if (liveCount < CAP) spawn();
+            }
+
+            renderCloud();
+            updateCounters();
+
+            // adaptive-dataset panel: render a fresh kept sim ~6 Hz; noise shrinks as it converges
+            ringAcc += dt;
+            if (ringAcc > 160) {
+              ringAcc = 0;
+              // draw a FRESH theta from the current proposal: the ring jitters
+              // widely early on and settles onto x_o as the cloud tightens
+              var th = sampleCov(est.mean, est.cov);
+              var spread = Math.sqrt(Math.max(est.cov[0] + est.cov[2], 0));
+              var noise = Math.max(0.05, Math.min(0.22, 0.05 + 0.10 * spread));
+              renderRing(trainC, th, noise);
+            }
+          }
+          raf = requestAnimationFrame(frame);
+        }
+
+        // ---------- run control tied to slide visibility ----------
+        var raf = null;
+        function start() { if (raf == null) { last = 0; raf = requestAnimationFrame(frame); } }
+        function stop() { if (raf != null) { cancelAnimationFrame(raf); raf = null; } }
+
+        function setRunning(on) {
+          running = on;
+          var b = document.getElementById('dyn-toggle');
+          if (on) {
+            b.innerHTML = '&#10073;&#10073; Pause';
+            liveEl.innerHTML = '&#9679; running'; liveEl.style.color = '#2ea44f';
+          } else {
+            b.innerHTML = '&#9654; Resume';
+            liveEl.innerHTML = '&#9679; paused'; liveEl.style.color = '#95a0a8';
+          }
+        }
+
+        // ---------- wiring ----------
+        document.getElementById('dyn-toggle').addEventListener('click', function (ev) { ev.stopPropagation(); setRunning(!running); });
+        document.getElementById('dyn-reset').addEventListener('click', function (ev) { ev.stopPropagation(); reset(); setRunning(true); });
+        sec.querySelectorAll('button').forEach(function (b) {
+          b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+        });
+
+        reset();
+        drawTarget();
+        renderCloud();
+
+        function init() {
+          if (!window.Reveal || !Reveal.on) { return setTimeout(init, 150); }
+          var cur = Reveal.getCurrentSlide ? Reveal.getCurrentSlide() : null;
+          if (cur === sec) start();
+          Reveal.on('slidechanged', function (e) {
+            if (e.currentSlide === sec) start(); else stop();
+          });
+          document.addEventListener('visibilitychange', function () {
+            if (document.hidden) stop();
+            else if (Reveal.getCurrentSlide && Reveal.getCurrentSlide() === sec) start();
+          });
+        }
+        // standalone (no Reveal) fallback: just run
+        if (!window.Reveal) start();
+        window.addEventListener('load', init);
+      })();
+      </script>
+    </section>
+
+    <!-- Efficient targeted inference — Dynamic SBI workflow (PDF p45) -->
+    
+
+<section>
+      <p class="eyebrow">Vision &gt; Dynamic SBI</p>
+      <h2>Dynamic SBI &mdash; Results for gravitational wave image analysis</h2>
+      <div style="display:flex; gap:154px; margin-top:8px; align-items:center;">
+        <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+          <img src="img/p46_loss.png" style="width:80%;">
+          <img src="img/p46_sims.png" style="width:80%;">
+        </div>
+        <div style="flex:1.4; text-align:center;">
+          <img src="img/p46_corner.png" style="width:100%;">
+        </div>
+      </div>
+      <p style="font-size:0.7em; color:#7f8c8d; text-align:left; margin:4px 0 0;">
+        arXiv:2510.13997
+      </p>
+    </section>
+
+    <!-- Towards a global fit for LISA (PDF p47) -->
+    
+
+<section>
+      <p class="eyebrow">Vision &gt; Distributed SBI</p>
+      <h2>Towards a global fit for LISA</h2>
+      <p class="subtitle" style="margin-top:0;">
+      </p>
+      <div style="text-align:top; margin-top:0px;">
+        <img src="img/p47_flow.png" style="max-width:100%; max-height:480px;">
+      </div>
+    </section>
+
+    <!-- Towards a software ecosystem — Falcon -->
+    
+
+<section>
+      <p class="eyebrow">Vision &gt; Distributed SBI</p>
+      <h2>A first attempt: the LISA Radler challenge</h2>
+      <p class="subtitle" style="margin-top:0;">Single massive black-hole binary, Falcon SBI vs. PTMCMC</p>
+      <div style="display:flex; align-items:center; justify-content:center; gap:0px; margin-top:0px;">
+        <div style="flex:1.0; text-align:center;">
+          <img src="img/match1day_to_Radler_dyadic256_1024_n96_nval1024_highsvd_scale=2.png" style="max-height:450px; max-width:100%;">
+        </div>
+        <div style="flex:1.2; text-align:center;">
+          <img src="img/posterior_waveforms_zoom.png" style="max-width:100%; max-height:250px;">
+          <p style="font-size:0.7em; color:#7f8c8d; text-align:center; margin:6px 0 0;">
+            Huifang Lyu &mdash; work in progress
+          </p>
+      <ul style="font-size:0.62em; margin:6px 0 0;">
+        <li>SBI posteriors closely track the MCMC reference, although not yet perfect.</li>
+        <li>This quality is only possible through extreme zooming: some parameters are pinned to <b>sub-percent</b> accuracy relative to the prior.</li>
+        <li><b>11 parameters:</b> chirp mass log&#8321;&#8320;(M<sub>c</sub>) to <b>&lt;0.5%</b> and coalescence time t<sub>c</sub> to <b>&#8810;1%</b> (tens of seconds) &mdash; mass ratio &eta; and spins a&#8321;,&nbsp;a&#8322; to a few %; sky position (&lambda;, sin&beta;), distance log&#8321;&#8320;(D<sub>L</sub>), inclination cos&iota;, phase &phi;&#8320; and polarization &psi; remain prior-dominated.</li>
+      </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- CLOSING                                                      -->
+    <!-- ============================================================ -->
+
+    
+
+<section>
+      <h2>Summary</h2>
+      <ul style="font-size:0.86em;">
+        <li>Next-generation instruments (LISA, precision cosmology) deliver exquisite data, but their inference problems are <strong>entangled</strong>: overlapping sources, unknown source counts, joint noise / instrument / signal models.</li>
+        <li><strong>Simulation-based inference</strong> turns the problem around: rather than writing a tractable likelihood, we learn the posterior directly from a simulator with neural networks. The model can be anything you can simulate.</li>
+        <li>This unlocks regimes that are highly expensive or completely impossible classically: <strong>amortized</strong> real-time inference, <strong>implicit</strong> marginalisation over systematics, <strong>marginal</strong> posteriors, and <strong>field-level</strong> inference of millions of parameters.</li>
+        <li><strong>Sequential</strong> and <strong>dynamic</strong> SBI focus the simulation budget where it matters, pushing towards a continuous, distributed global fit (first Falcon results on the LISA Radler challenge).</li>
+        <li><strong>Lots of promise</strong>, but also still plenty of work ahead: reliable tooling, infrastructure, scalable algorithms, and standardized robustness checks all still need building.</li>
+      </ul>
+
+      <p class="fragment" style="text-align:center; margin-top:26px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.6em; color:#2c3e50;">
+        Thank you!
+      </p>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- BACKUP SLIDES                                                -->
+    <!-- ============================================================ -->
+    
+
+    <!-- ============================================================ -->
+    <!-- HANDS-ON — transition to the tutorial (new)                  -->
+    <!-- ============================================================ -->
+
+    <section class="section-slide">
+      <div class="stack">
+        <div class="grad-bar"></div>
+        <h1>Hands-on</h1>
+        <p>From MLPs to LISA &mdash; everything above, in ~150 lines of PyTorch</p>
+        <div class="grad-bar below"></div>
+      </div>
+    </section>
+
+    <!-- Tutorial 1 — the five parts -->
+    <section>
+      <p class="eyebrow">Hands-on &gt; The tutorial</p>
+      <h2>From MLPs to LISA: simulation-based inference, hands-on</h2>
+      <p class="subtitle" style="margin-top:0;">
+        Five parts, ~115 minutes. Plain PyTorch &mdash; no SBI framework, no installs.
+      </p>
+
+      <div style="display:flex; gap:22px; margin-top:8px; align-items:flex-start;">
+
+        <div style="flex:1.35;">
+          <table style="width:100%; border-collapse:collapse; font-size:0.72em; line-height:1.35;">
+            <tr style="background:#ecf0f1;">
+              <th style="text-align:left; padding:6px 8px; width:8%; font-family:'Space Grotesk',sans-serif;">part</th>
+              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">what you fit</th>
+              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">new ingredient</th>
+            </tr>
+            <tr style="border-bottom:1px solid #e5e8ea;">
+              <td style="padding:7px 8px; font-weight:600; color:#2980b9;">1</td>
+              <td style="padding:7px 8px;">a <strong>function</strong> &mdash; sine curve, then a harder shape</td>
+              <td style="padding:7px 8px; color:#566069;">MLPs, gradient descent, overfitting, early stopping</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e5e8ea; background:#eaf3fb;">
+              <td style="padding:7px 8px; font-weight:600; color:#2980b9;">2</td>
+              <td style="padding:7px 8px;">a <strong>distribution</strong> &mdash; banana, spiral, rings</td>
+              <td style="padding:7px 8px; color:#566069;"><strong>flow matching</strong>, conditioning</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e5e8ea;">
+              <td style="padding:7px 8px; font-weight:600; color:#2980b9;">3</td>
+              <td style="padding:7px 8px;">a <strong>posterior</strong> &mdash; feed FM pairs from a simulator</td>
+              <td style="padding:7px 8px; color:#566069;">SBI, amortization</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e5e8ea;">
+              <td style="padding:7px 8px; font-weight:600; color:#2980b9;">4</td>
+              <td style="padding:7px 8px;">a <strong>toy gravitational wave</strong></td>
+              <td style="padding:7px 8px; color:#566069;">data compression (PCA) + <strong>sequential</strong> zoom</td>
+            </tr>
+            <tr style="background:#fdf2e6; border-left:4px solid #e67e22;">
+              <td style="padding:7px 8px; font-weight:600; color:#e67e22;">5</td>
+              <td style="padding:7px 8px;">a <strong>massive black-hole binary in LISA data</strong><br>
+                  <span style="color:#7f8c8d;">LDC1 &ldquo;Radler&rdquo;, 9 parameters, one day of data</span></td>
+              <td style="padding:7px 8px; color:#566069;">(pre-simulated training bank)</td>
+            </tr>
+          </table>
+
+          <div class="box box-blue" style="margin-top:12px; font-size:0.74em;">
+            <strong>The spine:</strong> the ten-line <code>fm_loss</code> and the small
+            <code>VelocityNet</code> you write in Part&nbsp;2 are reused <em>literally unchanged</em> in
+            Parts&nbsp;3, 4 and 5. This is not magic infrastructure &mdash; it is a loss function and a
+            loop you fully understand, and it analyzes a gravitational wave.
+          </div>
+        </div>
+
+        <div style="flex:0.65; font-size:0.74em; line-height:1.45;">
+          <div class="box box-green" style="margin:0;">
+            <strong>Before we start</strong>
+            <ol style="margin:6px 0 0; padding-left:1.15em;">
+              <li>Open the notebook in Colab</li>
+              <li>Runtime &rarr; Change runtime type &rarr; <strong>T4 GPU</strong></li>
+              <li>Run all cells top to bottom (~3&ndash;5 min)</li>
+            </ol>
+            <p style="margin:7px 0 0; color:#7f8c8d;">Everything also runs on CPU, just slower.</p>
+          </div>
+
+          <div style="background:#2c3e50; border-radius:8px; padding:10px 12px; margin-top:11px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.62em; color:#95a5a6;
+                        letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">Repository</div>
+            <code style="font-size:0.68em; color:#ecf0f1; background:none; word-break:break-all;">github.com/cweniger/<br>teaching-2607-LISA-Hackathon</code>
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.62em; color:#95a5a6;
+                        letter-spacing:0.1em; text-transform:uppercase; margin:9px 0 5px;">Notebook</div>
+            <code style="font-size:0.68em; color:#f39c12; background:none; word-break:break-all;">tutorial_lisa_sbi.ipynb</code>
+          </div>
+
+          <p style="margin:9px 2px 0; font-size:0.88em; color:#7f8c8d;">
+            Two companion notebooks (<code>lisa_sims</code>, <code>lisa_sequential</code>) install the
+            lisabeta waveform stack and simulate LISA data live, if you want to go further.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tutorial 2 — the failure chain -->
+    <section>
+      <p class="eyebrow">Hands-on &gt; The tutorial</p>
+      <h2>Each part fixes the <em style="font-style:normal; color:#c0392b;">visible failure</em> of the one before</h2>
+      <p class="subtitle" style="margin-top:0;">
+        You will see each method break before you are shown the thing that repairs it.
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:7px; margin-top:12px; font-size:0.78em;">
+
+        <div style="display:flex; align-items:center; gap:12px; background:#f7f9fa; border-radius:8px; padding:9px 14px;">
+          <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#2980b9;">Part 1</div>
+          <div style="flex:1;">An MLP fits any function &hellip;</div>
+          <div style="flex:0 0 26px; color:#c0392b; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:1.25; color:#c0392b;">&hellip; and cheerfully fits the noise too</div>
+          <div style="flex:0 0 26px; color:#27ae60; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:0.95; font-weight:600; color:#27ae60;">early stopping</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; background:#f7f9fa; border-radius:8px; padding:9px 14px;">
+          <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#2980b9;">Part 2</div>
+          <div style="flex:1;">A Gaussian head is fast and exact &hellip;</div>
+          <div style="flex:0 0 26px; color:#c0392b; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:1.25; color:#c0392b;">&hellip; and returns a diffuse blob for a curved posterior</div>
+          <div style="flex:0 0 26px; color:#27ae60; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:0.95; font-weight:600; color:#27ae60;">flow matching</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; background:#f7f9fa; border-radius:8px; padding:9px 14px;">
+          <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#2980b9;">Part 3</div>
+          <div style="flex:1;">Simulate pairs, train, get a posterior &hellip;</div>
+          <div style="flex:0 0 26px; color:#c0392b; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:1.25; color:#c0392b;">&hellip; but real data \(x\) has thousands of dimensions</div>
+          <div style="flex:0 0 26px; color:#27ae60; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:0.95; font-weight:600; color:#27ae60;">PCA compression</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; background:#f7f9fa; border-radius:8px; padding:9px 14px;">
+          <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#2980b9;">Part 4</div>
+          <div style="flex:1;">Train from the wide prior &hellip;</div>
+          <div style="flex:0 0 26px; color:#c0392b; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:1.25; color:#c0392b;">&hellip; <strong>10 of 4096</strong> simulations land near the posterior</div>
+          <div style="flex:0 0 26px; color:#27ae60; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:0.95; font-weight:600; color:#27ae60;">sequential zoom</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; background:#fdf2e6; border-radius:8px; padding:9px 14px;">
+          <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#e67e22;">Part 5</div>
+          <div style="flex:1;">The same stack, on LDC1 Radler data &hellip;</div>
+          <div style="flex:0 0 26px; color:#e67e22; font-size:1.2em; text-align:center;">&rarr;</div>
+          <div style="flex:2.4; font-weight:600; color:#e67e22;">&hellip; masses to five digits, and the distance&ndash;inclination caustic</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; margin-top:14px; font-size:0.74em;">
+        <div class="box box-purple" style="flex:1; margin:0;">
+          <strong>The take-home.</strong> The whole dynamic loop at teaching size is ~40 lines.
+          At production scale the same method &mdash; automated by <code>falcon</code> &mdash; reaches
+          posteriors within <strong>~1 nat</strong> of the information-theoretic optimum on the
+          LDC1-1 MBHB problem.
+        </div>
+        <div style="flex:0.9; font-size:0.9em; color:#7f8c8d; line-height:1.45;">
+          Deliberately <em>not</em> used in the notebook: any SBI framework. At tutorial scale a
+          framework only subtracts &mdash; black-box calls, install risk, abstraction overhead.
+          <br><br>
+          <span style="color:#34495e;">Dynamic SBI: arXiv:2510.13997 &middot; falcon: github.com/cweniger/falcon</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/math/math.js"></script>
+<script src="lib/plotly.min.js"></script>
+<script src="lib/presentation-helpers.js"></script>
+<script src="lib/presentation-boot.js"></script>
+
+</body>
+</html>

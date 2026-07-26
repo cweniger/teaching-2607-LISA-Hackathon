@@ -4,3 +4,6 @@
 *.npz
 *.png
 __pycache__/
+
+# Slide-deck assets are not regenerable figures -- they travel with the deck.
+!260727 - LISA Hackathon/img/*.png

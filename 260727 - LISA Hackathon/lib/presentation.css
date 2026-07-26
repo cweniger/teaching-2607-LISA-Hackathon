@@ -1,0 +1,99 @@
+/* Presentation deck — shared styles.
+   Per-presentation additions live in a small inline <style> block in the file. */
+
+.reveal .slides section {
+  background: #ffffff;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  padding: 30px 40px;
+  box-sizing: border-box;
+  height: 700px !important;
+}
+.reveal .slides section.stack {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  height: auto !important;
+}
+.reveal { font-family: 'Inter', sans-serif; font-weight: 400; }
+.reveal h1, .reveal h2, .reveal h3 { color: #2c3e50; font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+.reveal h2 { font-size: 1.2em; margin-bottom: 0.3em; text-align: left; }
+.reveal .subtitle { font-size: 0.92em; color: #7f8c8d; margin-top: 0.5em; }
+.reveal section { font-size: 0.66em; }
+.reveal section.stack { font-size: 1em; }
+.reveal p { margin: 0.3em 0; }
+.reveal ul { text-align: left; margin: 0.3em 0; }
+.reveal li { margin: 0.15em 0; }
+.reveal .highlight { color: #e74c3c; font-weight: bold; }
+.reveal .MathJax { font-size: 0.95em; }
+
+.reveal .box, .reveal .box-blue, .reveal .box-orange,
+.reveal .box-green, .reveal .box-purple {
+  background: #ecf0f1; border-radius: 10px; padding: 12px 16px;
+  margin: 10px 0; text-align: left;
+}
+.reveal .box-blue   { border-left: 4px solid #2980b9; }
+.reveal .box-orange { border-left: 4px solid #e67e22; }
+.reveal .box-green  { border-left: 4px solid #27ae60; }
+.reveal .box-purple { border-left: 4px solid #8e44ad; }
+
+.slide-footer {
+  position: absolute; bottom: 8px; left: 40px; right: 40px;
+  font-size: 10px; color: #bdc3c7;
+  display: flex; justify-content: space-between; pointer-events: none;
+}
+
+pre code { font-family: 'Menlo','Monaco',monospace; }
+
+.ctrl-row { display:flex; gap:14px; font-size:0.9em; align-items:center; margin-top:4px; flex-wrap:wrap; }
+.ctrl-row label { white-space: nowrap; }
+.ctrl-row input[type=range] { vertical-align: middle; }
+.ctrl-row button { padding:3px 12px; cursor:pointer; }
+.ctrl-row input[type=checkbox] { vertical-align: middle; transform: scale(1.2); margin-right:4px; }
+
+/* --- Title & section-divider slides ----------------------------- */
+.reveal section.title-slide,
+.reveal section.section-slide {
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+}
+.reveal section.title-slide .stack,
+.reveal section.section-slide .stack { max-width: 90%; }
+
+.reveal section.title-slide h1 { font-size: 1.6em; margin: 0; }
+.reveal section.title-slide h3 {
+  font-size: 0.9em; color: #34495e; margin: 0.4em 0 0;
+  font-family: 'Space Grotesk', sans-serif; font-weight: 500;
+}
+.reveal section.title-slide .title-meta {
+  font-size: 0.7em; color: #7f8c8d; margin-top: 1.4em;
+}
+
+.reveal section.section-slide h1 { font-size: 2em; margin: 0; }
+.reveal section.section-slide p {
+  font-size: 1.1em; color: #7f8c8d; margin-top: 15px;
+}
+.reveal .grad-bar {
+  width: 200px; height: 4px;
+  background: linear-gradient(90deg, #2980b9, #e74c3c);
+  margin: 0 auto 25px;
+}
+.reveal .grad-bar.below { margin: 25px auto 0; }
+
+/* Eyebrow: flush top-right corner tag, white-on-blue, for slide families */
+.reveal .eyebrow {
+  position: absolute;
+  top: 0; right: 0;
+  background: #2980b9;
+  color: #fff;
+  padding: 5px 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.5em;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin: 0;
+  border-bottom-left-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
