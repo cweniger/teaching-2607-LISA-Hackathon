@@ -244,22 +244,24 @@ def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000,
 
 # %% [markdown]
 
-# Nothing in the network cared that the input was one number: `MLP(30, 1)` maps a
-# 30-dimensional vector to a scalar just as happily. That is the shape of every
-# problem in the rest of this notebook — **a lot of data in, few parameters
-# out** — so we start there.
+# The input need not be a single number: `MLP(30, 1)` maps a 30-dimensional
+# vector to a scalar. As an example we take a prototypical parameter-estimation
+# problem — measuring the frequency of a noisy sine.
 #
-# A sine of unknown frequency $\nu$ is sampled at 30 fixed times and buried in
-# noise:
+# The signal is sampled at 30 fixed times and buried in noise,
 #
-# $$d_j = \sin(2\pi\,\nu\,t_j) + 0.3\,\varepsilon_j, \qquad
+# $$x_j = \sin(2\pi\,\nu\,t_j) + 0.3\,\varepsilon_j, \qquad
 #   t_j = \tfrac{j}{29},\quad j = 0 \dots 29, \qquad
-#   \nu \sim U(1, 5)\ \text{cycles}.$$
+#   \nu \sim U(1, 5)\ \text{cycles},$$
 #
-# The network sees the 30 noisy samples and must return $\nu$. We hand it the
-# rescaled target $(\nu-1)/4 \in [0,1]$, for the $O(1)$ reason above. The
-# frequencies stay well below this grid's Nyquist limit of 15 cycles, so nothing
-# here is ambiguous in principle.
+# with $\varepsilon_j \sim \mathcal N(0, 1)$. The network sees the 30 samples
+# $x$ and must return $\nu$. The frequencies stay well below this grid's Nyquist
+# limit of 15 cycles, so nothing here is ambiguous in principle.
+#
+# One sentence worth keeping in mind: a network trained on squared error
+# converges to the conditional mean $\mathbb E[\nu \,|\, x]$, so its output is a
+# **posterior mean** and the estimated $\hat\sigma$ is a **posterior width**. This is already
+# simulation-based inference, just a very simplified form of it (Gaussian posterior, homoscedastic noise).
 
 # %%
 
@@ -334,18 +336,18 @@ for lo in range(1, 5):
 # fine. The training NLL falls without limit, because
 # $\hat\sigma$ tracks training residuals and those keep shrinking as the network
 # memorizes its 300 examples. The validation NLL bottoms out and then leaves the
-# top of the panel: a network claiming precision it achieves only on data it has
-# already seen is a terrible model for data it has not. Early stopping keeps the
-# one network on that curve worth having.
+# top of the panel: a network starts overfitting noise, and achieves precision on data it has
+# already seen that it cannot keep on unseen data. Early stopping keeps the network
+# in the range where the network residuals on training data are comparable to network residuals on held-out data, 
+# and the model remains realistic regarding its own precision.
 #
-# **The error bar is one number; the error is not.** The band is the model's
+# Note: The band is the model's
 # $\hat\sigma$, identical at every frequency, while the printout shows the real
 # scatter roughly doubling across the band — 30 samples cover fewer points per
-# cycle as $\nu$ grows. One $\sigma$ for all inputs is the wrong *shape* of
-# answer.
+# cycle as $\nu$ grows. One $\sigma$ for all inputs cannot account for the frequency dependence of the measurement uncertainty.
 #
 # What we want is a distribution over $\nu$ that **depends on the data**: wide
-# here, narrow there, and in general curved and multi-modal. That is Part 2.
+# here, narrow there, and in general one that can be curved and multi-modal. Approaches to this problem will be discussed in Part 2.
 
 # %% [markdown]
 
