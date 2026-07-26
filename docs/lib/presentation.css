@@ -94,6 +94,23 @@ pre code { font-family: 'Menlo','Monaco',monospace; }
 }
 .reveal .grad-bar.below { margin: 25px auto 0; }
 
+/* "Details" affordance: centred at the bottom of a slide that has a vertical
+   down-slide under it. Non-interactive -- reveal's own arrow keys navigate. */
+.reveal .down-hint {
+  position: absolute;
+  left: 50%; bottom: 24px;
+  transform: translateX(-50%);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.5em; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: #95a0a8; text-align: center; line-height: 1.1;
+  pointer-events: none;
+}
+.reveal .down-hint .chev {
+  display: block; font-size: 1.45em; letter-spacing: 0; margin-top: 1px;
+  color: #2980b9;
+}
+
 /* Eyebrow: flush top-right corner tag, white-on-blue, for slide families */
 .reveal .eyebrow {
   position: absolute;
