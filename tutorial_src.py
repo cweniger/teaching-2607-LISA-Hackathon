@@ -754,42 +754,65 @@ fig.tight_layout()
 
 # %% [markdown]
 
-# Write your own conditional target and fit it. `study_conditional` below does
-# everything once you supply a sampler with the signature
-# `my_target(c) -> (n, 2)`, where `c` is `(n, 1)` — one condition per row.
+# Write your own conditional target and fit it. All you have to supply is a
+# function `my_target(c)` that takes a **single float** $c \in [0,1]$ and returns
+# **one** two-dimensional sample. Plain numpy is fine — no tensors, no batching,
+# no device. `study_conditional(my_target)` does everything else: it draws 40000
+# training samples at random $c$, fits a flow, and plots the flow against your
+# target side by side at four values of $c$.
 #
-# 1. **Your family.** Ideas: two blobs whose separation is $c$; a ring whose
-#    thickness is $c$; a shape that changes its number of modes with $c$; letters
-#    morphing into each other.
-# 2. **Unseen conditions.** Ask for a $c$ outside the training range. Does your
+# The starting point in the cell below is a Gaussian blob whose centre slides
+# with $c$:
+#
+# ```python
+# def my_target(c):                      # c is a float in [0, 1]
+#     return np.array([4 * c - 2, 0.0]) + 0.3 * np.random.randn(2)
+# ```
+#
+# 1. **Your family.** Replace it with something more interesting. Ideas: two
+#    blobs whose separation is $c$; a ring whose thickness is $c$; a shape that
+#    changes its number of modes with $c$; letters morphing into each other.
+# 2. **Unseen conditions.** Ask for conditions outside the training range, e.g.
+#    `study_conditional(my_target, requests=[0.0, 0.5, 1.0, 1.4])`. Does your
 #    family extrapolate as badly as the spiral's scale did? Families where $c$
 #    only rescales things often survive; ones where $c$ changes the *structure*
 #    do not.
-# 3. **The ODE knob.** Pass `steps=1, 4, 16` to `fm_sample`. How many Euler steps
-#    do you need? What does `steps=1` correspond to geometrically?
-# 4. **Training budget.** Halve `steps` in `train_fm`, or drop `N_DATA` to 5000.
-#    Which part of the picture degrades first — the shape, or its dependence
-#    on $c$?
+# 3. **The ODE knob.** Pass `sample_steps=1, 4, 16`. How many Euler steps do you
+#    need? What does `sample_steps=1` correspond to geometrically?
+# 4. **Training budget.** Halve `steps` (the number of Adam steps), or drop
+#    `n_data` to 5000. Which part of the picture degrades first — the shape, or
+#    its dependence on $c$?
 
 # %%
 
-def study_conditional(my_target, c_lo=0.0, c_hi=1.0, n_data=40000, steps=4000,
-                      requests=None, sample_steps=64):
-    """Fit a conditional flow to my_target(c) and compare against it."""
-    c = c_lo + (c_hi - c_lo) * torch.rand(n_data, 1, device=dev)
-    th = my_target(c)
+def study_conditional(my_target, n_data=40000, steps=4000,
+                      requests=(0.0, 0.33, 0.67, 1.0), sample_steps=64):
+    """Fit a conditional flow to my_target and plot it against the target.
+
+    my_target(c) takes one float c in [0, 1] and returns one 2-D sample (any
+    array-like of length two -- a numpy array, a list, a tuple). We call it once
+    per example in a plain Python loop, which costs a second or two for 40000
+    samples and is nothing next to the training that follows.
+    """
+    def draw(c):
+        """Call my_target for every row of c (n, 1) -> samples (n, 2)."""
+        th = np.stack([np.asarray(my_target(cv), dtype=float)
+                       for cv in c.flatten().tolist()])
+        return torch.tensor(th, dtype=torch.float32, device=dev)
+
+    c = torch.rand(n_data, 1, device=dev)          # training conditions ~ U(0, 1)
+    th = draw(c)
     net = VelocityNet(2, d_cond=1).to(dev)
     train_fm(net, th, c, steps=steps, log=False)
 
-    requests = requests if requests is not None else np.linspace(c_lo, c_hi, 4)
     lim = 1.15 * th.abs().max().item()             # one shared scale for all panels
     fig, ax = plt.subplots(1, len(requests), figsize=(3.4 * len(requests), 3.6))
     for a, cv in zip(np.atleast_1d(ax), requests):
         cc = torch.full((3000, 1), float(cv), device=dev)
-        tr, got = my_target(cc).cpu(), fm_sample(net, cc, 2, steps=sample_steps).cpu()
+        tr, got = draw(cc).cpu(), fm_sample(net, cc, 2, steps=sample_steps).cpu()
         a.plot(tr[:, 0], tr[:, 1], 'k.', ms=1, alpha=.2, label='target')
         a.plot(got[:, 0], got[:, 1], 'C0.', ms=1, alpha=.3, label='flow')
-        tag = '' if c_lo <= cv <= c_hi else '  (EXTRAP.)'
+        tag = '' if 0.0 <= cv <= 1.0 else '  (EXTRAP.)'
         a.set(title=f'c = {cv:.2f}{tag}', aspect='equal',
               xlim=(-lim, lim), ylim=(-lim, lim))
     np.atleast_1d(ax)[0].legend(markerscale=8, fontsize=8)
@@ -798,22 +821,24 @@ def study_conditional(my_target, c_lo=0.0, c_hi=1.0, n_data=40000, steps=4000,
 
 # %%
 
-# TODO — your code here: return (n, 2) samples for conditions c of shape (n, 1),
-# then hand it to study_conditional.
+# TODO — your code here. my_target takes one float c in [0, 1] and returns one
+# 2-D sample. Below: a Gaussian blob whose centre slides with c. Replace it.
 def my_target(c):
-    raise NotImplementedError('write your own conditional target')
+    return np.array([4 * c - 2, 0.0]) + 0.3 * np.random.randn(2)
 
+
+study_conditional(my_target)
 
 # %%
 
 # @title Reference solution { display-mode: "form" }
 def my_target(c):                                   # noqa: F811
     """A banana that rotates with c: structure changes, so extrapolation fails."""
-    u = torch.rand_like(c) * 6 - 3                            # along the arc
-    v = 0.3 * u ** 2 - 1.2 + 0.25 * torch.randn_like(c)       # bend it
+    u = np.random.uniform(-3, 3)                              # along the arc
+    v = 0.3 * u ** 2 - 1.2 + 0.25 * np.random.randn()         # bend it
     ang = 2 * np.pi * c                                       # the rotation
-    return torch.cat([u * ang.cos() - v * ang.sin(),
-                      u * ang.sin() + v * ang.cos()], 1)
+    return [u * np.cos(ang) - v * np.sin(ang),
+            u * np.sin(ang) + v * np.cos(ang)]
 
 
 study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
