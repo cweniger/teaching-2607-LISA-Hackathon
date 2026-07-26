@@ -891,80 +891,81 @@ study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
 # A ball is launched from the ground at angle $\alpha$ with speed $v$ on a flat
 # planet, and we measure only **where it lands**:
 #
-# $$r(v, \alpha) = \frac{v^2}{g}\,\sin(2\alpha), \qquad
-#   x = r(v, \alpha) + \sigma\,\varepsilon, \quad \varepsilon\sim\mathcal N(0,1).$$
+# $$x = \frac{v^2}{g}\,\sin(2\alpha) + \sigma\,\varepsilon, \qquad
+#   \varepsilon \sim \mathcal N(0, 1).$$
 #
-# We want $\theta = (v, \alpha)$ from $x$. One number in, two parameters out —
-# so this problem is *degenerate by construction*, and the shape of the
-# degeneracy is not something we invented: it is whatever the curve
-# $v^2\sin(2\alpha) = \text{const}$ happens to look like. Two features fall out
-# of the physics for free:
+# We want $\theta = (v, \alpha)$ out of that single number, so the problem is
+# degenerate by construction — and the degeneracy is not one we invented, it is
+# whatever the curve $v^2 \sin(2\alpha) = \text{const}$ happens to look like: a
+# **curved ridge**, folded back on itself at $45°$, because a lob at $60°$ and a
+# line drive at $30°$ land in exactly the same place. The two throws below are
+# indistinguishable from the landing point alone.
 #
-# - **a curved ridge**, because a slower ball thrown at a better angle lands in
-#   the same place as a faster ball thrown at a worse one;
-# - **bimodality**, because $\sin(2\alpha)$ is symmetric about $45°$ — a lob at
-#   $60°$ and a line drive at $30°$ are indistinguishable from the landing
-#   point alone.
-#
-# This is the everyday reality of GW parameter estimation in miniature. (The
-# distance–inclination degeneracy of a real black-hole binary is exactly this:
-# a face-on binary far away looks like an edge-on binary nearby.)
+# This is GW parameter estimation in miniature. The distance–inclination
+# degeneracy of a real black-hole binary is the same statement: a face-on binary
+# far away looks like an edge-on binary nearby.
 
 # %%
 
 G = 9.81
-SIGMA_X = 0.4                                # measurement noise on the range [m]
-BALL_LO = torch.tensor([8.0, 0.15], device=dev)      # v [m/s], alpha [rad]
-BALL_HI = torch.tensor([12.0, np.pi / 2 - 0.15], device=dev)
+SIGMA_X = 0.4                                  # measurement error on the range [m]
+THETA_LO = torch.tensor([8.0, 0.15], device=dev)             # v [m/s], alpha [rad]
+THETA_HI = torch.tensor([12.0, np.pi / 2 - 0.15], device=dev)
 
 
-def ball_range(theta):
-    """Noise-free landing position r(v, alpha) -> (n,)."""
-    v, alpha = theta[:, 0], theta[:, 1]
-    return v ** 2 / G * torch.sin(2 * alpha)
+def sample_theta(n):
+    """The prior: n draws of theta = (v, alpha), uniform in the box -> (n, 2)."""
+    return THETA_LO + (THETA_HI - THETA_LO) * torch.rand(n, 2, device=dev)
 
 
-def ball_sim(theta, n_throws=1):
-    """Simulator: theta (n,2) -> mean of n_throws measured landings, (n,1)."""
-    r = ball_range(theta)[:, None]
-    noise = SIGMA_X * torch.randn(len(theta), n_throws, device=theta.device)
-    return r + noise.mean(1, keepdim=True)   # noise on the mean: sigma/sqrt(n)
+def sample_x(theta, n_throws=1):
+    """The simulator: theta (n, 2) -> the measured landing position (n, 1).
+
+    Averaging n_throws repeats of the same throw shrinks the measurement error
+    to sigma / sqrt(n_throws); the physics itself is the single line for r.
+    """
+    v, alpha = theta[:, :1], theta[:, 1:2]
+    r = v ** 2 / G * torch.sin(2 * alpha)                    # where it lands
+    eps = torch.randn(len(theta), n_throws, device=theta.device)
+    return r + SIGMA_X * eps.mean(1, keepdim=True)
 
 
-def draw_ball_prior(n):
-    return BALL_LO + (BALL_HI - BALL_LO) * torch.rand(n, 2, device=dev)
+def ball_path(theta, n=200):
+    """The flight path, for the picture only: theta (m, 2) -> (m, n, 2) of (x, y)."""
+    v, alpha = theta[:, :1], theta[:, 1:2]
+    t = torch.linspace(0, 1, n, device=theta.device) * 2 * v * alpha.sin() / G
+    return torch.stack([v * alpha.cos() * t,
+                        v * alpha.sin() * t - 0.5 * G * t ** 2], -1)
+
+
+def ridge(x_obs, v):
+    """The degeneracy: the angles that land a ball of speed v at range x_obs."""
+    s = G * x_obs / v ** 2                     # = sin(2 alpha); > 1 is unreachable
+    a = 0.5 * torch.asin(s.masked_fill(s > 1, float('nan')))
+    return a, np.pi / 2 - a                    # the line drive and the lob
+
+
+def plot_ridge(ax, x_obs):
+    """Draw that curve on a (v, alpha) plane, and set up the axes."""
+    v = torch.linspace(THETA_LO[0], THETA_HI[0], 200, device=dev)
+    for a in ridge(x_obs, v):
+        ax.plot(v.cpu(), np.degrees(a.cpu()), 'k--', lw=1)
+    ax.set(xlabel='v [m/s]', ylabel=r'$\alpha$ [deg]',
+           xlim=(8, 12), ylim=(np.degrees(0.15), 90 - np.degrees(0.15)))
 
 
 THETA_TRUE = torch.tensor([[10.4, 0.62]], device=dev)   # v = 10.4 m/s, alpha = 36 deg
-print(f'true parameters:  v = {THETA_TRUE[0, 0]:.1f} m/s, '
-      f'alpha = {np.degrees(THETA_TRUE[0, 1].item()):.0f} deg')
-print(f'noise-free range: r = {ball_range(THETA_TRUE).item():.2f} m')
+TWIN = torch.tensor([[10.4, np.pi / 2 - 0.62]], device=dev)      # the 54 deg lob
+paths = ball_path(torch.cat([THETA_TRUE, TWIN])).cpu()
 
-# %% [markdown]
-
-# The reference posterior is analytic here (uniform prior times a Gaussian
-# likelihood on one number), so we can check the network against the truth.
-
-# %%
-
-def ball_true_logpost(vg, ag, x_obs, n_throws=1):
-    """Exact log-posterior on a (v, alpha) grid, up to a constant."""
-    V, A = torch.meshgrid(vg, ag, indexing='ij')
-    r = V ** 2 / G * torch.sin(2 * A)
-    return -0.5 * (x_obs - r) ** 2 / (SIGMA_X ** 2 / n_throws)
-
-
-vg = torch.linspace(BALL_LO[0], BALL_HI[0], 300, device=dev)
-ag = torch.linspace(BALL_LO[1], BALL_HI[1], 300, device=dev)
-
-
-def plot_ball_truth(ax, x_obs, n_throws=1):
-    lp = ball_true_logpost(vg, ag, x_obs, n_throws).cpu()
-    p = np.exp(lp - lp.max())
-    ax.contour(vg.cpu(), np.degrees(ag.cpu()), p.T, levels=[0.011, 0.14, 0.61],
-               colors='k', linewidths=1)             # 3/2/1 sigma of a Gaussian
-    ax.set(xlabel='v [m/s]', ylabel=r'$\alpha$ [deg]',
-           xlim=(8, 12), ylim=(np.degrees(0.15), 90 - np.degrees(0.15)))
+fig, ax = plt.subplots(figsize=(6.5, 3.0))
+for p, th, c in zip(paths, torch.cat([THETA_TRUE, TWIN]).cpu(), ['C0', 'C3']):
+    ax.plot(p[:, 0], p[:, 1], c, lw=1.5,
+            label=fr'$v$ = {th[0]:.1f} m/s, $\alpha$ = {np.degrees(th[1]):.0f}$^\circ$')
+ax.axvline(paths[0, -1, 0].item(), color='k', ls=':', lw=1)
+ax.set(xlabel='distance [m]', ylabel='height [m]', ylim=(0, None))
+ax.legend(fontsize=8, title='same landing point', title_fontsize=8)
+fig.tight_layout()
 
 # %% [markdown]
 
@@ -987,15 +988,15 @@ def zscore(a, mean, std):
 
 def run_ball_sbi(n_throws, n_train=40000, steps=3000):
     """Simulate a training set, fit q(theta | x), return posterior samples."""
-    theta = draw_ball_prior(n_train)                  # theta_i ~ prior
-    x = ball_sim(theta, n_throws)                     # x_i ~ p(x | theta_i)
+    theta = sample_theta(n_train)                     # theta_i ~ prior
+    x = sample_x(theta, n_throws)                     # x_i ~ p(x | theta_i)
     tmu, tsd = theta.mean(0), theta.std(0)
     xmu, xsd = x.mean(0), x.std(0)
 
     net = VelocityNet(2, d_cond=1).to(dev)            # w = theta (2), cond = x (1)
     train_fm(net, zscore(theta, tmu, tsd), zscore(x, xmu, xsd), steps=steps)
 
-    x_obs = ball_sim(THETA_TRUE, n_throws)            # our observation
+    x_obs = sample_x(THETA_TRUE, n_throws)            # our observation
     so = zscore(x_obs, xmu, xsd).expand(6000, 1)
     post = fm_sample(net, so, 2) * tsd + tmu
     return post.cpu(), x_obs.item()
@@ -1010,7 +1011,7 @@ post_20, x_obs_20 = run_ball_sbi(n_throws=20)
 
 fig, ax = plt.subplots(1, 2, figsize=(11, 4.6), sharey=True)
 for a, post, xo, nt in [(ax[0], post_1, x_obs_1, 1), (ax[1], post_20, x_obs_20, 20)]:
-    plot_ball_truth(a, xo, nt)
+    plot_ridge(a, xo)
     a.plot(post[:, 0], np.degrees(post[:, 1]), 'C0.', ms=1.5, alpha=.25)
     a.plot(THETA_TRUE[0, 0].cpu(), np.degrees(THETA_TRUE[0, 1].cpu()), 'r*', ms=15)
     a.set_title(f'{nt} throw{"s" if nt > 1 else ""}:  x = {xo:.2f} m')
@@ -1019,14 +1020,14 @@ fig.tight_layout()
 
 # %% [markdown]
 
-# **What the posterior looks like.** Not a blob. A curved ridge that traces
-# every $(v, \alpha)$ landing the ball where we saw it, folded back on itself
-# about $45°$: the two arms meet at the slowest speed that can reach this far,
-# $v = \sqrt{g\,x}$, thrown at exactly $45°$. Read it along a vertical line and
-# it is **bimodal** — any speed above that minimum has two viable angles, one
-# lob and one line drive. The network found all of this from a regression loss,
-# having never been shown the range formula. Black contours: the exact
-# posterior.
+# **What the posterior looks like.** Not a blob. A curved ridge lying along the
+# dashed line — every $(v, \alpha)$ that lands the ball where we saw it — folded
+# back on itself about $45°$, where the two arms meet at the slowest speed that
+# can reach this far, $v = \sqrt{g\,x}$. Read it along a vertical line and it is
+# **bimodal**: any speed above that minimum has two viable angles, one lob and
+# one line drive. The network found all of this from a regression loss, having
+# never been shown the range formula — the dashed curve is drawn from the
+# formula only so that we can see it got the shape right.
 #
 # **What more data does, and does not do.** Twenty throws instead of one
 # shrinks the measurement noise by $\sqrt{20}$ and the arms become correspondingly
@@ -1042,15 +1043,9 @@ fig.tight_layout()
 #    three different observed ranges without retraining — try a near-maximal
 #    range ($x \approx v^2/g \approx 11$ m). What happens to the two modes as
 #    the range approaches the largest achievable one?
-# 2. **Break the degeneracy.** Change `ball_sim` to return *two* numbers, the
+# 2. **Break the degeneracy.** Change `sample_x` to return *two* numbers, the
 #    range **and** the time of flight $2 v \sin\alpha / g$, and set
 #    `d_cond = 2`. What happens to the second mode? Why?
-# 3. **Coverage.** Draw 200 parameter pairs from the prior, simulate one
-#    observation each, sample 200 posterior draws per observation, and record
-#    the fraction of posterior samples with $v$ below the true $v$. If the
-#    posterior is calibrated, those fractions should be *uniform* on $[0,1]$ —
-#    plot the histogram. This is the standard SBI validation test, and it needs
-#    no reference posterior at all.
 
 # %%
 
@@ -1061,20 +1056,19 @@ fig.tight_layout()
 
 # @title Reference solution { display-mode: "form" }
 # 1: amortization over the observed range, in one trained network.
-theta_b = draw_ball_prior(40000)
-x_b = ball_sim(theta_b, 1)
+theta_b = sample_theta(40000)
+x_b = sample_x(theta_b, 1)
 tmu_b, tsd_b = theta_b.mean(0), theta_b.std(0)
 xmu_b, xsd_b = x_b.mean(0), x_b.std(0)
 net_b = VelocityNet(2, d_cond=1).to(dev)
-train_fm(net_b, zscore(theta_b, tmu_b, tsd_b), zscore(x_b, xmu_b, xsd_b),
-         steps=6000, log=False)      # longer: question 3 needs an accurate posterior
+train_fm(net_b, zscore(theta_b, tmu_b, tsd_b), zscore(x_b, xmu_b, xsd_b), log=False)
 
 fig, ax = plt.subplots(1, 3, figsize=(14, 4.4), sharey=True)
 for a, xo in zip(ax, [6.0, 9.5, 11.5]):
     xt = torch.tensor([[xo]], device=dev)
     post = (fm_sample(net_b, zscore(xt, xmu_b, xsd_b).expand(6000, 1), 2)
             * tsd_b + tmu_b).cpu()
-    plot_ball_truth(a, xo)
+    plot_ridge(a, xo)
     a.plot(post[:, 0], np.degrees(post[:, 1]), 'C0.', ms=1.5, alpha=.25)
     a.set_title(f'x = {xo} m')
 for a in ax[1:]:
@@ -1082,7 +1076,7 @@ for a in ax[1:]:
 fig.tight_layout()
 
 # 2: adding the time of flight kills the second mode.
-def ball_sim2(theta, n_throws=1):
+def sample_x2(theta, n_throws=1):
     """Range AND time of flight -> (n, 2)."""
     v, alpha = theta[:, 0], theta[:, 1]
     m = torch.stack([v ** 2 / G * torch.sin(2 * alpha),      # range
@@ -1091,33 +1085,20 @@ def ball_sim2(theta, n_throws=1):
     return m + sd * torch.randn(len(theta), 2, device=theta.device) / np.sqrt(n_throws)
 
 
-x_b2 = ball_sim2(theta_b, 1)
+x_b2 = sample_x2(theta_b, 1)
 x2mu, x2sd = x_b2.mean(0), x_b2.std(0)
 net_b2 = VelocityNet(2, d_cond=2).to(dev)
 train_fm(net_b2, zscore(theta_b, tmu_b, tsd_b), zscore(x_b2, x2mu, x2sd), log=False)
 
-x_obs2 = ball_sim2(THETA_TRUE, 1)
+x_obs2 = sample_x2(THETA_TRUE, 1)
 post2 = (fm_sample(net_b2, zscore(x_obs2, x2mu, x2sd).expand(6000, 2), 2)
          * tsd_b + tmu_b).cpu()
 
-# 3: coverage -- the rank of the truth among posterior samples should be uniform.
-N_SIM, N_POST = 1000, 100
-theta_c = draw_ball_prior(N_SIM)
-x_c = ball_sim(theta_c, 1)
-post_c = fm_sample(net_b, zscore(x_c, xmu_b, xsd_b).repeat_interleave(N_POST, 0), 2)
-post_c = (post_c * tsd_b + tmu_b).reshape(N_SIM, N_POST, 2)
-ranks = (post_c[:, :, 0] < theta_c[:, None, 0]).float().mean(1).cpu()
-
-fig, ax = plt.subplots(1, 2, figsize=(10.5, 4.2))
-plot_ball_truth(ax[0], x_obs2[0, 0].item())
-ax[0].plot(post2[:, 0], np.degrees(post2[:, 1]), 'C2.', ms=1.5, alpha=.25)
-ax[0].plot(THETA_TRUE[0, 0].cpu(), np.degrees(THETA_TRUE[0, 1].cpu()), 'r*', ms=15)
-ax[0].set_title('range + time of flight: one mode left')
-ax[1].hist(ranks, bins=10, range=(0, 1), color='C0', alpha=.8)
-ax[1].axhline(N_SIM / 10, color='r', ls='--', lw=1, label='uniform expectation')
-ax[1].set(xlabel=r'fraction of posterior samples below true $v$',
-          ylabel='count', title='coverage: flat is calibrated')
-ax[1].legend(fontsize=8)
+fig, ax = plt.subplots(figsize=(5.5, 4.4))
+plot_ridge(ax, x_obs2[0, 0].item())
+ax.plot(post2[:, 0], np.degrees(post2[:, 1]), 'C2.', ms=1.5, alpha=.25)
+ax.plot(THETA_TRUE[0, 0].cpu(), np.degrees(THETA_TRUE[0, 1].cpu()), 'r*', ms=15)
+ax.set_title('range + time of flight: one mode left')
 fig.tight_layout()
 
 # %% [markdown]
@@ -1129,15 +1110,7 @@ fig.tight_layout()
 # time of flight depends on $\sin\alpha$, not $\sin 2\alpha$, and is therefore
 # *not* symmetric about $45°$ — one extra number breaks the reflection and one
 # mode dies. Choosing what to measure is inference design, and it beats any
-# amount of network tuning. (3) For an exact posterior the histogram is flat by
-# construction, so its *shape* diagnoses the failure: a slope means a biased
-# posterior, a hump in the middle means one that is too wide, and excess in
-# both end bins — which is what you should see here, mildly — means one that is
-# slightly too *narrow*, i.e. over-confident, so the truth lands in the tails
-# more often than it should. That is a few-percent error, invisible in the
-# contour plot above, and it needs no reference posterior to detect. Which is
-# why this is *the* validation tool once the problems get real and no exact
-# answer exists to compare against.
+# amount of network tuning.
 
 # %% [markdown]
 
@@ -1451,7 +1424,7 @@ fig.tight_layout()
 # **One honest caveat.** Compare the late rounds against the black contours
 # carefully: the final posterior is a little *narrower* than the exact one
 # (roughly half the width, in our runs). Some of that is the flow's own mild
-# over-confidence, which you already met in Part 3's coverage test, but most of
+# over-confidence, but most of
 # it is structural. The buffer converges to $L^\gamma\pi$, and we then train
 # $q_c(\theta|s)$ **on that buffer** — so the likelihood enters twice, once
 # through the buffer and once through the conditioning, and the readout behaves
