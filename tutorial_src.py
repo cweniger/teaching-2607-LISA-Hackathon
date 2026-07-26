@@ -858,23 +858,32 @@ study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
 # ---
 # # Part 3 — From generative models to inference: SBI
 #
-# Here is the whole idea of simulation-based inference, in one sentence:
-# **take conditional flow matching and feed it pairs from a simulator.**
+# We now arrive at a modern way of doing simulation-based inference (SBI) with
+# neural networks: **take conditional flow matching and feed it pairs from a
+# simulator.**
 #
-# In Part 2 the pairs $(w_1, c)$ were ring points and their radius. Now let
-# $w_1 = \theta$ (the parameters we want to infer) and $c = x$ (the data we
-# observe), and manufacture the pairs like this:
+# In Part 2 the pairs $(\theta_1, c)$ were the outputs and inputs of a stochastic
+# simulator — your `my_target` — and the network learned to sample
+# $p(\theta_1 \,|\, c)$. For inference we manufacture the pairs differently: draw
+# parameters from a prior, push them through a simulator, and let the *data* play
+# the role of the condition,
 #
-# $$\theta_i \sim p(\theta) \quad \text{(prior)}, \qquad
-#   x_i \sim p(x \,|\, \theta_i) \quad \text{(simulator)} .$$
+# $$\theta_i \sim p(\theta), \qquad x_i \sim p(x \,|\, \theta_i), \qquad c = x .$$
 #
-# Those $(\theta_i, x_i)$ are samples from the joint $p(x\,|\,\theta)\,p(\theta)$,
-# which we know how to sample *forwards*. Train the conditional model on them
-# and it learns the *other* factorization of the same joint — the **posterior**
-# $q_\phi(\theta \,|\, x) \approx p(\theta \,|\, x)$. No likelihood evaluation,
-# no MCMC, no Bayes' theorem applied by hand: the theorem is enforced purely by
-# where the training pairs come from. And because the model is amortized in
-# $c = x$ (the rings), one training run gives the posterior for *any*
+# Each pair is a draw from the joint distribution, and the joint factorizes two
+# ways — which is all Bayes' theorem is:
+#
+# $$\underbrace{p(x \,|\, \theta)\,p(\theta)}_{\textstyle \text{what we can sample}}
+#   \;=\; p(\theta, x) \;=\;
+#   \underbrace{p(\theta \,|\, x)\,p(x)}_{\textstyle \text{what we want}}
+#   \qquad\Longleftrightarrow\qquad
+#   p(\theta \,|\, x) = \frac{p(x \,|\, \theta)\,p(\theta)}{p(x)} .$$
+#
+# We can only sample the left-hand side; a network trained on those samples hands
+# us the right-hand one, $q_\phi(\theta \,|\, x) \approx p(\theta \,|\, x)$. No
+# likelihood evaluation, no MCMC, no theorem applied by hand — it is enforced
+# purely by where the training pairs come from. And because the model is
+# amortized in $c = x$, one training run gives the posterior for *any*
 # observation.
 #
 # ## The simulator: throwing a ball
