@@ -5,5 +5,6 @@
 *.png
 __pycache__/
 
-# Slide-deck assets are not regenerable figures -- they travel with the deck.
-!260727 - LISA Hackathon/img/*.png
+# Slide-deck assets are not regenerable figures -- they travel with the deck
+# that GitHub Pages serves out of docs/.
+!docs/img/*.png
