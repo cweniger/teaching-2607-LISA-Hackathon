@@ -8,3 +8,6 @@ __pycache__/
 # Slide-deck assets are not regenerable figures -- they travel with the deck
 # that GitHub Pages serves out of docs/.
 !docs/img/*.png
+
+# unrelated local repo living inside this folder
+260617 - ICTP SAIFR Colloquium/
