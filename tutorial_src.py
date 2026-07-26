@@ -19,6 +19,10 @@
 # > **Colab setup:** Runtime → Change runtime type → **T4 GPU**, then run all
 # > cells top to bottom. Everything also works on CPU, just slower.
 #
+# > **Collapsing sections:** headings sit in their own cells, so clicking the
+# > triangle next to one folds it away. Anything titled ***Aside*** is safe to
+# > skip on a first read — collapse them all and you have the core path.
+#
 # > **New to PyTorch?** There is a short **FAQ at the end of this notebook**
 # > answering the things that trip people up on a first read (`.detach()`,
 # > `no_grad()`, why shapes are `(n, 1)`, what `state_dict` is). The official
@@ -44,73 +48,38 @@ print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for 
 
 # %% [markdown]
 # ---
-# # Part 1 — Neural networks as fitting functions  *(~25 min)*
-#
+# # Part 1 — Neural networks  *(~30 min)*
+
+# %% [markdown]
 # ## The network
+
+# %% [markdown]
+# A **multi-layer perceptron** (MLP) is a program that turns an input vector
+# into an output vector. The same object is called a *feed-forward network*, a
+# *dense network*, or a *fully connected network*. It is the building block of
+# modern machine learning: convolutional networks, transformers and the flows of
+# Part 2 are all MLPs with extra structure bolted on.
 #
-# A **multi-layer perceptron** (MLP) is a computer program that turns an input
-# vector into an output vector. The same object is called a *feed-forward
-# neural network*, a *dense network*, or a *fully connected network* — four
-# names, one thing. It is the centrepiece of modern machine learning:
-# convolutional networks, transformers, and the flows we build in Part 2 are
-# all MLPs with extra structure bolted on, and every one of them still has
-# ordinary dense layers inside.
-#
-# The program is a chain of **affine maps** (linear transformations with an added constant shift),
-# each followed by a
-# **nonlinearity** $g$, applied to each vector component separately.
-# For an input $x \in \mathbb R^{d_{\rm in}}$, three
-# hidden layers of width $H$, and an output in $\mathbb R^{d_{\rm out}}$, this looks like:
+# It is a chain of **affine maps** — matrix multiply plus constant shift — each
+# followed by a **nonlinearity** $g$ applied componentwise. For an input
+# $x \in \mathbb R^{d_{\rm in}}$, three hidden layers of width $H$, and an
+# output in $\mathbb R^{d_{\rm out}}$:
 #
 # $$\begin{aligned}
 #   h^{(1)} &= g\big(W^{(1)} x + b^{(1)}\big),
-#     & W^{(1)} &\in \mathbb R^{H \times d_{\rm in}}, & b^{(1)} &\in \mathbb R^{H} \\
+#     & W^{(1)} &\in \mathbb R^{H \times d_{\rm in}} \\
 #   h^{(2)} &= g\big(W^{(2)} h^{(1)} + b^{(2)}\big),
-#     & W^{(2)} &\in \mathbb R^{H \times H}, & b^{(2)} &\in \mathbb R^{H} \\
+#     & W^{(2)} &\in \mathbb R^{H \times H} \\
 #   h^{(3)} &= g\big(W^{(3)} h^{(2)} + b^{(3)}\big),
-#     & W^{(3)} &\in \mathbb R^{H \times H}, & b^{(3)} &\in \mathbb R^{H} \\
+#     & W^{(3)} &\in \mathbb R^{H \times H} \\
 #   \hat y  &= W^{(4)} h^{(3)} + b^{(4)},
-#     & W^{(4)} &\in \mathbb R^{d_{\rm out} \times H},
-#     & b^{(4)} &\in \mathbb R^{d_{\rm out}}
+#     & W^{(4)} &\in \mathbb R^{d_{\rm out} \times H}
 # \end{aligned}$$
 #
-# Written compactly, $\hat y = \mathrm{MLP}_\phi(x)$, where the **parameters**
-# $\phi = \{W^{(1)}, b^{(1)}, \dots, W^{(4)}, b^{(4)}\}$ are all the numbers
-# the program contains. Two details that matter:
-#
-# - **The nonlinearity is what makes it more than one big matrix.** A chain of
-#   affine maps is itself an affine map, so without $g$ the whole network would
-#   collapse to a single $Wx + b$. The default is
-#   $g(z) = \mathrm{ReLU}(z) = \max(z, 0)$, which builds piecewise-linear
-#   outputs with visible kinks; smooth choices like `torch.tanh`,
-#   `nn.functional.gelu` or `torch.selu` build smooth outputs instead. The
-#   read-out has *no* nonlinearity, so $\hat y$ is free to take any value.
-# - **Initialization.** `nn.Linear` fills each $W$ and $b$ with small random
-#   numbers — by default uniform in $\pm 1/\sqrt{n_{\rm in}}$, where the
-#   *fan-in* $n_{\rm in}$ is the number of inputs to that layer (so wider
-#   layers start with smaller weights, keeping the output scale roughly
-#   independent of width). An untrained network is therefore already a
-#   perfectly valid — just useless — function. Training is nothing more than
-#   moving those numbers around, often just very little, until the computer
-#   program does approximately what you want.
-#
-# The four activations mentioned above, side by side:
-
-# %%
-zz = torch.linspace(-3, 3, 400)
-fig, ax = plt.subplots(figsize=(6.5, 3.0))
-for fn, nm in [(torch.relu, 'ReLU'), (torch.tanh, 'tanh'),
-               (nn.functional.gelu, 'GELU'), (torch.selu, 'SELU')]:
-    ax.plot(zz, fn(zz), lw=1.6, label=nm)
-ax.axhline(0, color='k', lw=.5); ax.axvline(0, color='k', lw=.5)
-ax.set(xlabel='z', ylabel='g(z)', title='activation functions')
-ax.legend(fontsize=8)
-fig.tight_layout()
-
-# %% [markdown]
-# All four are flat-ish (or linear) for large $|z|$ and bend near $z = 0$: the
-# bend is the only place a nonlinearity does anything. ReLU has a hard corner,
-# the others are smooth, and SELU/tanh saturate rather than growing.
+# Compactly, $\hat y = \mathrm{MLP}_\phi(x)$, with $\phi$ collecting every
+# $W^{(l)}$ and $b^{(l)}$ — the numbers training moves. Without $g$ the chain
+# would collapse to one affine map; the read-out deliberately has no $g$, so
+# $\hat y$ can take any value.
 
 # %%
 class MLP(nn.Module):
@@ -118,7 +87,7 @@ class MLP(nn.Module):
 
     def __init__(self, d_in=1, d_out=1, hidden=256, act=torch.relu):
         super().__init__()
-        self.act = act                             # torch.relu, torch.tanh, ...
+        self.act = act                             # torch.relu, torch.selu, ...
         self.fc1 = nn.Linear(d_in, hidden)         # W1: (hidden, d_in)
         self.fc2 = nn.Linear(hidden, hidden)       # W2: (hidden, hidden)
         self.fc3 = nn.Linear(hidden, hidden)       # W3: (hidden, hidden)
@@ -128,502 +97,297 @@ class MLP(nn.Module):
         h = self.act(self.fc1(x))   # W1 @ x + b1, then g   -> (n, hidden)
         h = self.act(self.fc2(h))   # W2 @ h + b2, then g   -> (n, hidden)
         h = self.act(self.fc3(h))   # W3 @ h + b3, then g   -> (n, hidden)
-        y = self.out(h)             # W4 @ h + b4, no g     -> (n, d_out)
-        return y
+        return self.out(h)          # W4 @ h + b4, no g     -> (n, d_out)
 
 # %% [markdown]
-# Here is what three freshly initialized networks compute, before any
-# training. Random parameters give random functions — that is the raw material
-# gradient descent will shape.
+# `nn.Linear` starts each $W$ and $b$ off at small random values, so an
+# untrained network is already a valid — if useless — function. Here is what
+# freshly initialized networks compute, with two different nonlinearities.
+# (Deliberately narrow, `hidden=8`, so that individual kinks stay visible; at
+# width 256 there are too many of them to see.)
 
 # %%
-xg = torch.linspace(-5, 5, 400)[:, None]        # a grid of 400 inputs, shape (400, 1)
+xg = torch.linspace(-5, 5, 400)[:, None]
 
-fig, ax = plt.subplots(figsize=(6.5, 3.2))
-for s in range(10):
-    torch.manual_seed(s)
-    ax.plot(xg, MLP(1, 1, hidden=256)(xg).detach(), lw=1.2, label=f'seed {s}')
-ax.set(xlabel='x', ylabel=r'$\hat y$', title='untrained networks are random functions')
-ax.legend(fontsize=8)
+fig, ax = plt.subplots(1, 2, figsize=(11, 3.4))
+for a, act, nm in [(ax[0], torch.relu, 'ReLU'), (ax[1], torch.selu, 'SELU')]:
+    for s in range(6):
+        torch.manual_seed(s)
+        a.plot(xg, MLP(1, 1, 8, act=act)(xg).detach(), lw=1.1)
+    a.axvspan(-1, 1, color='k', alpha=.07)
+    a.set(xlabel='x', title=f'{nm}, 6 random initializations (hidden=8)')
+ax[0].set_ylabel(r'$\hat y$')
 fig.tight_layout()
 
 # %% [markdown]
-# Note *where* those curves are interesting: all the wiggles live within
-# $|x| \lesssim 1$ and outputs of order one, and further out every curve is
-# straight — beyond the last kink a ReLU network is exactly affine. The default
-# initialization puts the network's expressive power around the origin, at
-# $O(1)$ scale. So always feed a network inputs (and ask it for outputs) that
-# are **normalized to mean zero and unit variance**; every later part of this
-# notebook z-scores its data for exactly this reason.
+# Two things to take from this:
+#
+# - **The interesting behaviour lives at $O(1)$.** The curves bend inside the
+#   grey band and are straight and boring outside it — past its last kink a ReLU
+#   network is exactly affine. So always **normalize** a network's inputs and
+#   outputs to roughly mean zero and unit variance; every later part of this
+#   notebook z-scores its data for this reason.
+# - **Smoothness is inherited from $g$.** ReLU gives corners, SELU gives smooth
+#   curves. Neither is more powerful; they fail differently.
 
 # %% [markdown]
-# The parameters themselves — the tensors training will move — are what
-# `net.parameters()` returns. It is worth looking at them once:
+# ### Aside — how the initial values are chosen
 
-# %%
-demo = MLP(1, 1, hidden=256)
-for name, p in demo.named_parameters():
-    print(f'  {name:12s} {tuple(p.shape)}')
-print(f'total: {sum(p.numel() for p in demo.parameters())} numbers')
+# %% [markdown]
+# By default `nn.Linear` draws each weight and bias uniformly from
+# $\pm 1/\sqrt{n_{\rm in}}$, where the **fan-in** $n_{\rm in}$ is the number of
+# inputs to that layer. Wider layers therefore start with smaller weights, which
+# keeps the scale of a layer's output roughly independent of its width — without
+# it, stacking wide layers would make activations grow or vanish geometrically
+# with depth.
 
 # %% [markdown]
 # ## Fitting with gradient descent
+
+# %% [markdown]
+# Given pairs $(x_i, y_i)$ we want the network to reproduce them. The obvious
+# measure of mismatch is the **mean squared error**,
 #
-# Given input–output pairs $(x_i, y_i)$, we want the network to reproduce
-# them. In simple situations, one can quantify the mismatch with the **mean squared error**,
+# $$\mathrm{MSE}(\phi) = \frac{1}{N} \sum_{i=1}^{N}
+#   \big(\mathrm{MLP}_\phi(x_i) - y_i\big)^2 ,$$
 #
-# $$\mathcal L(\phi) = \frac{1}{N} \sum_{i=1}^{N}
-#   \big\|\,\mathrm{MLP}_\phi(x_i) - y_i\,\big\|^2 ,$$
-#
-# and optimise the network by minimizing it over all weights and biases at once
-# — every $W^{(1)}, b^{(1)}, \dots, W^{(4)}, b^{(4)}$ from the equations above,
-# collected into the single vector $\phi$ — by **gradient descent**.
-# Gradient descent is an iterative update that repeatedly steps in the
-# direction of steepest descent,
+# minimized over all of $\phi$ at once by **gradient descent** — repeatedly
+# stepping in the direction of steepest descent,
 #
 # $$\phi_{k+1} = \phi_k - \eta\, \nabla_\phi \mathcal L(\phi_k),
 #   \qquad k = 0, 1, 2, \dots$$
 #
-# starting from the random initialization $\phi_0$ discussed above, with an adjustable **learning rate**
-# $\eta$, which sets the step size. Each iteration $k$ over the full set of $N$ training examples is one *epoch* below:
+# from the random $\phi_0$ above, with the **learning rate** $\eta$ setting the
+# step size. Each iteration $k$ over all $N$ examples is one *epoch*.
+#
+# **We monitor something better than the MSE.** An MSE says how large the errors
+# are, not whether the network's *confidence* is justified. So give the model a
+# noise level $\sigma$ — $y_i \sim \mathcal N(\mathrm{MLP}_\phi(x_i), \sigma^2)$ —
+# and track its negative log-likelihood,
+#
+# $$\mathcal L = \frac{\mathrm{MSE}}{2\sigma^2} \;+\; \log\sigma ,
+#   \qquad \hat\sigma^2 = \mathrm{MSE}_{\rm train},$$
+#
+# a probability density rather than a score. The best $\sigma$ for a given
+# network is just its root-mean-square training residual, so we plug that in
+# each epoch instead of fitting it.
 #
 # ```text
-# ALGORITHM  fit(net, {(x_i, y_i)}, epochs, eta)
+# ALGORITHM  fit(net, train, validation, eta, patience)
 # ──────────────────────────────────────────────────────────────
 # phi ← all trainable parameters of net (every W and b)
-# opt ← Adam(phi, learning rate eta)      # optimizer: holds pointers to phi
+# opt ← Adam(phi, learning rate eta)
 #
-# for epoch = 1 … epochs:
-#     y_pred_i ← net(x_i)   for all i     # forward pass (running the computer program aka network)
-#     L  ← (1/N) Σ_i ||y_pred_i − y_i||²  # scalar loss (calculating the MSE)
-#     g  ← ∂L/∂phi                        # backward pass (calculating the gradient of the loss w.r.t. the parameters)
-#     phi ← phi − eta·g                   # update phi in place (done by the optimizer, here Adam)
+# repeat for each epoch:
+#     y_pred ← net(x_train)                    # forward pass
+#     MSE    ← mean (y_pred − y_train)²         # scalar loss
+#     g      ← ∂MSE/∂phi                        # backward pass
+#     phi    ← phi − eta·g                      # update, in place
 #
-# return net                              # phi now (locally) minimizes L
+#     sigma  ← sqrt(MSE_train)                  # plug-in noise level
+#     L_val  ← MSE_val/(2 sigma²) + log sigma   # validation NLL
+#     if L_val is the best so far: remember phi
+#     if no improvement for `patience` epochs: stop
+#
+# return the remembered phi                     # "early stopping"
 # ──────────────────────────────────────────────────────────────
 # ```
 #
-# We use **Adam**, a gradient-descent variant that adapts the step size per
-# parameter to the loss surface — the loop structure is exactly the one above. 
-# 
-# **Avoiding overfitting through validation:** In practice, alongside the
-# training loss, we would track a **validation loss**: the same MSE but calculated on held-out data
-# the network never trains on. It measures how well the network generalizes to unseen inputs, which is the ultimate goal.
-# The validation loss typically bottoms out and then rises again as the network starts to memorize the training data, which is a sign of overfitting.
+# The last two steps are **early stopping**: keep the parameters from the best
+# validation epoch, not the last one. It makes the number of epochs a knob you
+# no longer have to tune — pass something large and let `patience` decide.
 
 # %%
-def fit(net, x, y, x_val, y_val, epochs, lr=1e-3):
-    # Adam is handed net.parameters() -- the tensors printed above -- and holds
-    # pointers to them: "training" means updating them in place.
-    # (eps damps Adam's adaptive step once the training gradients get tiny —
-    # without it, full-batch Adam on few points goes unstable late in training)
-    opt = torch.optim.Adam(net.parameters(), lr=lr, eps=1e-3)
+def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000):
+    """Train on MSE; monitor the Gaussian NLL with a plug-in sigma; stop early."""
+    opt = torch.optim.Adam(net.parameters(), lr=lr)   # holds pointers to phi
+    hist, best, best_ep, snap = [], np.inf, 0, None
 
-    hist, best_val, snap_val = [], np.inf, None
     for ep in range(epochs):
-        # forward pass: run the network on every training input
-        y_hat = net(x)
+        mse = ((net(x) - y) ** 2).mean()               # forward pass + loss
+        opt.zero_grad()                                # PyTorch accumulates grads
+        mse.backward()                                 # fills p.grad for every p
+        opt.step()                                     # one gradient step
 
-        # loss: mean squared error between prediction and target
-        loss = ((y_hat - y) ** 2).mean()
+        with torch.no_grad():                          # monitoring only
+            sig2 = ((net(x) - y) ** 2).mean()          # plug-in sigma^2
+            mse_val = ((net(x_val) - y_val) ** 2).mean()
+            nll = (0.5 + 0.5 * sig2.log()).item()      # train NLL = 0.5 + log sigma
+            nll_val = (0.5 * mse_val / sig2 + 0.5 * sig2.log()).item()
+        hist.append((nll, nll_val, sig2.sqrt().item()))
 
-        # backward pass: fills p.grad = dL/dp for every parameter p
-        opt.zero_grad()  # reset gradients calculation (PyTorch *accumulates* them by default)
-        loss.backward()
-
-        # gradient step: update every parameter in place using its .grad
-        opt.step()
-
-        # book-keeping only — no gradients needed
-        with torch.no_grad():
-            val = ((net(x_val) - y_val) ** 2).mean()
-            hist.append((loss.item(), val.item()))
-            # keep a copy of the weights whenever the validation loss improves
-            if val < best_val:
-                best_val, snap_val = val.item(), copy.deepcopy(net.state_dict())
-
-        # print progress every 200 epochs
-        if (ep + 1) % 200 == 0:
-            print(f'epoch {ep + 1:5d}:  train {loss:.4f}   val {val:.4f}')
-    return np.array(hist), snap_val
-
-# %% [markdown]
-# ## Example: approximating a trigonometric function
-#
-# **The "generative model".** As an example, let our data be $N$ noisy observations of a smooth
-# function $f$:
-# $$y_i = f(x_i) + \epsilon_i, \qquad f(x) = \sin(2\pi x), \qquad
-#   \epsilon_i \sim \mathcal N(0, \sigma^2),$$
-# with inputs $x_i \sim U(-1, 1)$ and noise level $\sigma = 0.2$. The network
-# only ever sees the pairs $(x_i, y_i)$ — it knows neither $f$ nor which part
-# of each $y_i$ is signal and which part is noise $\epsilon_i$.
-
-# %%
-def make_data(n, sigma=0.2, seed=0):
-    """n samples of the generative model  y = sin(2 pi x) + epsilon."""
-    torch.manual_seed(seed)
-    x = torch.rand(n, 1) * 2 - 1                         # x_i ~ U(-1, 1)
-    y = torch.sin(2 * np.pi * x) + sigma * torch.randn(n, 1)  # y_i = f(x_i) + eps_i
-    return x, y
-
-# %% [markdown]
-# Drawing the data and looking at it is good practice. The dashed curve and the
-# shaded band are the generative model above; the network will only ever see
-# the blue dots. (The gray dots are a second, held-out draw used for
-# validation — the network never trains on them.)
-
-# %%
-WIDTH, EPOCHS = 256, 3000                       # <-- network knobs (how wide, how long to train)
-N_TRAIN, SIGMA = 30, 0.2                        # <-- data knobs (how much, how noisy)
-
-x, y = make_data(N_TRAIN, sigma=SIGMA)                # generate training set
-x_val, y_val = make_data(200, sigma=SIGMA, seed=1)    # held-out set for validation
-
-xg = torch.linspace(-1, 1, 400)[:, None]              # a grid of 400 inputs, shape (400, 1)
-y_true = torch.sin(2 * np.pi * xg)                    # noise-free truth on the grid for plotting
-
-# Plot the data and the truth
-fig, ax = plt.subplots(figsize=(7.5, 3.8))
-ax.fill_between(xg[:, 0], y_true[:, 0] - SIGMA, y_true[:, 0] + SIGMA,
-                color='k', alpha=.10, lw=0, label=r'$f(x) \pm \sigma$')
-ax.plot(xg, y_true, 'k--', lw=1.2, label=r'$f(x) = \sin(2\pi x)$')
-ax.plot(x_val, y_val, '.', color='gray', ms=4, alpha=.5,
-        label='validation data (held out)')
-ax.plot(x, y, 'C0o', ms=7, label=f'training data ($N = {N_TRAIN}$)')
-ax.set(xlabel='x', ylabel='y', title='the data the network gets to see')
-ax.legend(fontsize=9)
-fig.tight_layout()
-
-# %%
-# Instantiate a fresh network.
-net = MLP(1, 1, WIDTH)
-
-# Train it on the noisy data, tracking the losses (hist) and remembering the best weights (snap_val).
-hist, snap_val = fit(net, x, y, x_val, y_val, EPOCHS)
-
-# %%
-# initialize a new network and load the weights at the best epoch
-net_best = MLP(1, 1, WIDTH)
-net_best.load_state_dict(snap_val)
-
-fig, ax = plt.subplots(1, 2, figsize=(12.5, 4.2))
-ax[0].plot(xg, y_true, 'k--', lw=1, label='truth')
-ax[0].plot(x, y, 'C0o', ms=5, label='train data')
-ax[0].plot(xg, net(xg).detach(), 'C1', lw=1.8, label=f'final fit (epoch {EPOCHS})')
-ax[0].plot(xg, net_best(xg).detach(), 'C2', lw=1.4,
-           label=f'best-validation fit (epoch {hist[:, 1].argmin() + 1})')
-ax[0].set(xlabel='x', ylabel='y'); ax[0].legend(fontsize=8)
-ax[1].semilogy(hist[:, 0], label='train loss')
-ax[1].semilogy(hist[:, 1], label='validation loss')
-ax[1].axhline(SIGMA ** 2, color='gray', ls=':', lw=1, label=r'noise floor $\sigma^2$')
-ax[1].set(xlabel='epoch', ylabel='MSE')
-ax[1].legend(fontsize=8)
-fig.tight_layout()
-
-# %% [markdown]
-# **Interpreting the two panels.**
-# - *Left:* the final fit passes through every noisy point and invents
-#   structure between them that is not in $f$. The 
-#   network as it stood at its best validation epoch is smoother and closer
-#   to the truth. That is the network one typically keeps.
-# - *Right:* the training loss falls indefinitely, because on the training
-#   points more optimization is always rewarded. The validation loss instead
-#   bottoms out and turns back up (although the effect is for this example quite small).
-#   Everything after that minimum can be interpreted a the
-#   network memorizing noise, which makes predictions on new data worse. This
-#   is **overfitting**. Note also the floor it cannot break: the held-out
-#   targets are $f(x) + \epsilon$, and no fit of $f$ predicts $\epsilon$, so the
-#   best achievable validation MSE is $\sigma^2$.
-# - *Spectral bias:* the noise-chasing wiggles are high-frequency and appear
-#   only later in the fit — MLPs fit smooth structure first (**spectral bias**). That
-#   is why early stopping works: large scale features and trends in the data are
-#   picked up first, and the noise later, which is cut off by stopping early based on the validation loss.
-
-# %% [markdown]
-# ## Early stopping
-#
-# Nobody reads a loss curve to pick the best epoch by hand. The standard
-# mechanism does it automatically: track the validation loss, remember the
-# weights whenever it improves, and stop once it has not improved for
-# `patience` epochs — then rewind to the best weights. Three extra lines, and
-# it makes `epochs` a knob you no longer have to tune: pass something huge and
-# let patience decide.
-
-# %%
-def fit_early(net, x, y, x_val, y_val, epochs=100_000, lr=1e-3, patience=300,
-              loss_fn=None, verbose=True):
-    """Gradient descent that stops itself once validation stops improving."""
-    if loss_fn is None:                         # default: mean squared error
-        def loss_fn(out, target):
-            return ((out - target) ** 2).mean()
-    opt = torch.optim.Adam(net.parameters(), lr=lr, eps=1e-3)
-    hist, best_val, best_ep, snap = [], np.inf, 0, None
-    for ep in range(epochs):
-        loss = loss_fn(net(x), y)
-        opt.zero_grad(); loss.backward(); opt.step()
-        with torch.no_grad():
-            val = loss_fn(net(x_val), y_val).item()
-        hist.append((loss.item(), val))
-        if val < best_val:                      # new best epoch: remember it
-            best_val, best_ep = val, ep
+        if nll_val < best:                             # new best: snapshot phi
+            best, best_ep = nll_val, ep
             snap = copy.deepcopy(net.state_dict())
-        if ep - best_ep > patience:             # no improvement for a while
+        if ep - best_ep > patience:                    # stalled: stop
             break
-    net.load_state_dict(snap)                   # rewind to the best epoch
-    if verbose:
-        print(f'stopped at epoch {ep + 1}; best val loss {best_val:.4f} '
-              f'at epoch {best_ep + 1}')
-    return np.array(hist)
+
+    net.load_state_dict(snap)                          # rewind to the best epoch
+    print(f'stopped at epoch {ep + 1}; best validation NLL {best:.2f} '
+          f'at epoch {best_ep + 1}')
+    return np.array(hist), best_ep
 
 # %% [markdown]
-# One helper wraps the whole cycle — make noisy data from a target function,
-# fit an early-stopped network, plot the fit and the curves — so that the
-# experiments below are one line each.
-
-# %%
-def study_function(fn, n_train=N_TRAIN, sigma=SIGMA, width=WIDTH,
-                   act=torch.relu, seed=0):
-    """Noisy data from fn -> early-stopped fit -> plot. Returns best val loss."""
-    # training and validation data, both noisy draws from fn
-    torch.manual_seed(seed)
-    xt = torch.rand(n_train, 1) * 2 - 1
-    yt = fn(xt) + sigma * torch.randn(n_train, 1)
-    torch.manual_seed(seed + 1)
-    xv = torch.rand(400, 1) * 2 - 1
-    yv = fn(xv) + sigma * torch.randn(400, 1)
-
-    # a fresh network, trained until validation stops improving
-    net = MLP(1, 1, width, act=act)
-    hist = fit_early(net, xt, yt, xv, yv)
-
-    # left panel: the truth, the data the network saw, and the fit
-    fig, ax = plt.subplots(1, 2, figsize=(12, 3.6))
-    ax[0].plot(xg, fn(xg), 'k--', lw=1.2, label='truth')
-    ax[0].plot(xt, yt, 'C0o', ms=4, alpha=.6, label=f'train (N = {n_train})')
-    ax[0].plot(xg, net(xg).detach(), 'C2', lw=1.6, label='early-stopped fit')
-    ax[0].set(xlabel='x', ylabel='y',
-              title=f'width {width}, N {n_train}, act {act.__name__}')
-    ax[0].legend(fontsize=8)
-
-    # right panel: the two loss curves and the noise floor
-    ax[1].semilogy(hist[:, 0], label='train'); ax[1].semilogy(hist[:, 1], label='val')
-    ax[1].axhline(sigma ** 2, color='gray', ls=':', lw=1, label=r'$\sigma^2$')
-    ax[1].set(xlabel='epoch', ylabel='MSE'); ax[1].legend(fontsize=8)
-    fig.tight_layout()
-    return hist[:, 1].min()
+# ### Aside — why the plug-in $\sigma$ costs nothing
 
 # %% [markdown]
-# **Exercise 1a — turn the knobs.** Run the cell below, then change one thing at
-# a time and watch both panels. Where does the best validation loss end up
-# relative to the noise floor $\sigma^2$, and what does the fit look like
-# between the data points?
-#
-# - `n_train` — try 10, 100, 500. How close to $\sigma^2$ can you get?
-# - `width` — try 2, 16, 1024. With early stopping on, is the widest the worst?
-# - `act` — try `torch.tanh` or `nn.functional.gelu`. The fit stops having
-#   corners; does it generalize any better?
-
-# %%
-sine = lambda x: torch.sin(2 * np.pi * x)       # noqa: E731
-
-study_function(sine)                            # <-- baseline; now vary one argument
-study_function(sine, n_train=200)
-study_function(sine, width=2)
-study_function(sine, act=torch.tanh)
+# Two conveniences hide in $\hat\sigma^2 = \mathrm{MSE}_{\rm train}$. First, it
+# is the exact maximum-likelihood $\sigma$ for the current network, so no
+# optimization is involved. Second, $\sigma$ drops out of
+# $\nabla_\phi \mathcal L$ entirely — minimizing the NLL over the network *is*
+# minimizing the MSE — so the gradient step is untouched and $\hat\sigma$ is
+# pure diagnostics. You could instead make $\sigma$ a learned `nn.Parameter`, but
+# then it lags the network by however long gradient descent takes to drag it
+# down, and the overfitting signal arrives late.
 
 # %% [markdown]
-# **Exercise 1b — your own function.** Fill in `my_function` below and hand it
-# to `study_function`. That is the only thing you write. Then push it until it
-# breaks:
-#
-# 1. **Frequency.** Try $\sin(8\pi x)$, then $\sin(20 \pi x)$. At fixed
-#    `n_train` the network stops resolving the oscillation — is that a lack of
-#    capacity or a lack of data? Test your answer by changing each in turn.
-# 2. **Sharp features.** Try a narrow bump, `torch.exp(-50 * x**2)`, or a step,
-#    `torch.sign(x)`. Where does the fit struggle, and what does that tell you
-#    about spectral bias?
-
-# %%
-# TODO — your code here: map x (n, 1) -> f(x) (n, 1). No noise; that is added
-# for you by study_function.
-def my_function(x):
-    raise NotImplementedError('write your own target function')
-
-
-# %%
-# @title Reference solution { display-mode: "form" }
-def my_function(x):                             # noqa: F811
-    """A chirp plus a narrow bump: easy on the left, hard on the right."""
-    return torch.sin(2 * np.pi * x * (1 + 2 * (x + 1))) + torch.exp(-60 * (x - 0.1) ** 2)
-
-
-study_function(my_function)
+# ### Aside — what Adam adds
 
 # %% [markdown]
-# ## Applying MLPs to high-dimensional inputs: many numbers in, one parameter out
+# We use **Adam** rather than the bare update above. It keeps a running average
+# of each parameter's gradient and of its square, and scales that parameter's
+# step by them, so parameters with persistently small gradients still move. The
+# loop structure is unchanged; only the step size becomes per-parameter and
+# adaptive.
+
+# %% [markdown]
+# ## Example: measuring a frequency
+
+# %% [markdown]
+# Nothing in the network cared that the input was one number: `MLP(30, 1)` maps a
+# 30-dimensional vector to a scalar just as happily. That is the shape of every
+# problem in the rest of this notebook — **a lot of data in, few parameters
+# out** — so we start there.
 #
-# So far the input was a single number. Nothing in the network required that —
-# an instantiated `MLP(30, 1, ...)` maps a 30-dimensional vector to a scalar just as happily:
-# high-dimensional data in, low-dimensional parameter out.
+# A sine of unknown frequency $\nu$ is sampled at 30 fixed times and buried in
+# noise:
 #
-# As a simple example, let us consider a sine of unknown frequency $\nu$,
-# sampled at 30 fixed times and buried in noise:
-#
-# $$d_j = \sin(2\pi\,\nu\,t_j) + \sigma\,\varepsilon_j, \qquad
+# $$d_j = \sin(2\pi\,\nu\,t_j) + 0.3\,\varepsilon_j, \qquad
 #   t_j = \tfrac{j}{29},\quad j = 0 \dots 29, \qquad
-#   \nu \sim U(1, 5)\ \text{cycles} .$$
+#   \nu \sim U(1, 5)\ \text{cycles}.$$
 #
-# The network sees the 30 noisy samples $d$ and must return $\nu$. We give it
-# the rescaled target $(\nu-1)/4 \in [0,1]$, because networks work best when
-# their inputs and outputs are $O(1)$. This is called z-scoring or normalization.
+# The network sees the 30 noisy samples and must return $\nu$. We hand it the
+# rescaled target $(\nu-1)/4 \in [0,1]$, for the $O(1)$ reason above. The
+# frequencies stay well below this grid's Nyquist limit of 15 cycles, so nothing
+# here is ambiguous in principle.
 
 # %%
 N_GRID, NU_LO, NU_HI = 30, 1.0, 5.0
 tj = torch.linspace(0, 1, N_GRID)
+SPAN = NU_HI - NU_LO
 
 
 def sine_data(n, sigma=0.3, seed=0, random_phase=False):
-    """n examples: d (n, 30) noisy sine samples, and the rescaled frequency."""
+    """n examples: d (n, 30) noisy samples, and the rescaled frequency (n, 1)."""
     torch.manual_seed(seed)
-    nu = NU_LO + (NU_HI - NU_LO) * torch.rand(n, 1)          # nu ~ U(1, 5)
+    nu = NU_LO + SPAN * torch.rand(n, 1)                     # nu ~ U(1, 5)
     phi = torch.rand(n, 1) * 2 * np.pi if random_phase else torch.zeros(n, 1)
     d = torch.sin(2 * np.pi * nu * tj + phi) + sigma * torch.randn(n, N_GRID)
-    return d, (nu - NU_LO) / (NU_HI - NU_LO)                 # target in [0, 1]
+    return d, (nu - NU_LO) / SPAN
 
 
-d_tr, nu_tr = sine_data(300, seed=0)
-d_va, nu_va = sine_data(2000, seed=1)
+d_tr, nu_tr = sine_data(300, seed=0)                # training set
+d_va, nu_va = sine_data(2000, seed=1)               # held-out set
 
-fig, ax = plt.subplots(1, 3, figsize=(13, 2.9), sharey=True)
-for a, i in zip(ax, [0, 1, 2]):
-    nu_i = NU_LO + (NU_HI - NU_LO) * nu_tr[i, 0]
+fig, ax = plt.subplots(1, 3, figsize=(13, 2.7), sharey=True)
+for a, i in zip(ax, range(3)):
+    nu_i = NU_LO + SPAN * nu_tr[i, 0]
     a.plot(tj, torch.sin(2 * np.pi * nu_i * tj), 'k--', lw=1, label='hidden signal')
     a.plot(tj, d_tr[i], 'C0o-', ms=4, lw=.8, label='what the network sees')
     a.set(xlabel='t', title=fr'$\nu$ = {nu_i:.2f} cycles')
 ax[0].set_ylabel('d'); ax[0].legend(fontsize=8)
 fig.tight_layout()
 
-# %% [markdown]
-# **Ask for an error bar, not just a number.** A single output $\hat\nu$ tells
-# us nothing about how sure the network is, so let it predict *two* numbers per
-# example, $\hat\nu$ and $\log\hat\sigma$, and train them together with the
-# Gaussian negative log-likelihood
-#
-# $$\mathcal L(\phi) = \Big\langle \tfrac12
-#   \Big(\frac{\nu - \hat\nu}{\hat\sigma}\Big)^{2}
-#   + \log\hat\sigma \Big\rangle .$$
-#
-# The first term is the familiar squared error, now divided by the network's own
-# claimed uncertainty; the $\log\hat\sigma$ term is what stops it from claiming
-# $\hat\sigma \to 0$. Minimizing this is fitting a probability density rather
-# than a curve — the step Part 2 takes seriously.
+# %%
+freq_net = MLP(N_GRID, 1, 256)                      # 30 numbers in, 1 out
+hist, best_ep = fit(freq_net, d_tr, nu_tr, d_va, nu_va)
+
+sigma_hat = hist[best_ep, 2] * SPAN                 # plug-in sigma, in cycles
+with torch.no_grad():
+    nu_est = (NU_LO + SPAN * freq_net(d_va)).squeeze()
+nu_true = (NU_LO + SPAN * nu_va).squeeze()
+resid = nu_est - nu_true
 
 # %%
-def gauss_nll(out, target):
-    """out: (n, 2) = (mu, log sigma). Gaussian NLL, constants dropped."""
-    mu, log_sigma = out[:, :1], out[:, 1:]
-    log_sigma = log_sigma.clamp(-4.0, 2.0)      # keep 1/sigma^2 from exploding
-    return (0.5 * ((target - mu) / log_sigma.exp()) ** 2 + log_sigma).mean()
-
-
-freq_net = MLP(N_GRID, 2, 256)                  # 30 inputs -> (mu, log sigma)
-hist_f = fit_early(freq_net, d_tr, nu_tr, d_va, nu_va, loss_fn=gauss_nll)
-
-
-def to_nu(z):                                   # rescaled target -> cycles
-    return NU_LO + (NU_HI - NU_LO) * z.detach()
-
-
-with torch.no_grad():
-    out_va = freq_net(d_va)
-mu_va = to_nu(out_va[:, :1])
-sig_va = (NU_HI - NU_LO) * out_va[:, 1:].clamp(-4.0, 2.0).exp()
-rms = (mu_va - to_nu(nu_va)).pow(2).mean().sqrt()
-
-fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.4))
+fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.2))
+ax[0].fill_between([NU_LO, NU_HI], [NU_LO - sigma_hat, NU_HI - sigma_hat],
+                   [NU_LO + sigma_hat, NU_HI + sigma_hat], color='C0', alpha=.18,
+                   label=fr'model: $\pm\hat\sigma$ = {sigma_hat:.2f} cycles')
 ax[0].plot([NU_LO, NU_HI], [NU_LO, NU_HI], 'k--', lw=1)
-ax[0].errorbar(to_nu(nu_va)[:150, 0], mu_va[:150, 0], yerr=sig_va[:150, 0],
-               fmt='C0.', ms=3, lw=.7, alpha=.6, label='validation, with error bar')
+ax[0].plot(nu_true, nu_est, 'C0.', ms=2, alpha=.35, label='held-out data')
 ax[0].set(xlabel=r'true $\nu$ [cycles]', ylabel=r'estimated $\nu$ [cycles]',
-          title=f'validation RMSE {rms:.3f} cycles', aspect='equal')
-ax[0].legend(fontsize=8)
-ax[1].plot(hist_f[:, 0], lw=.8, label='train loss')
-ax[1].plot(hist_f[:, 1], lw=.8, label='validation loss')
-ax[1].axvline(hist_f[:, 1].argmin(), color='k', ls=':', lw=1, label='best epoch')
-# the spikes are real: dividing by a learned sigma makes the loss surface stiff,
-# so full-batch Adam occasionally overshoots before recovering
-ax[1].set(xlabel='epoch', ylabel='Gaussian NLL', ylim=(-3.2, 0.5))
+          aspect='equal', title=f'RMSE {resid.pow(2).mean().sqrt():.3f} cycles')
+ax[0].legend(fontsize=8, loc='upper left')
+
+ax[1].plot(hist[:, 0], lw=1, label='training NLL')
+ax[1].plot(hist[:, 1], lw=1, label='validation NLL')
+ax[1].axvline(best_ep, color='k', ls=':', lw=1, label='best epoch (kept)')
+ax[1].set(xlabel='epoch', ylabel='negative log-likelihood', ylim=(-3.2, 1.0))
 ax[1].legend(fontsize=8)
 fig.tight_layout()
 
+# %%
+print('actual scatter, in bands of frequency:')
+for lo in range(1, 5):
+    m = (nu_true >= lo) & (nu_true < lo + 1)
+    print(f'  nu = {lo}-{lo + 1} cycles:  RMSE {resid[m].pow(2).mean().sqrt():.3f}'
+          f'   (model claims {sigma_hat:.3f})')
+
 # %% [markdown]
-# Now overfitting is unmistakable. The validation NLL bottoms out after a few
-# dozen epochs and then climbs, while the training NLL keeps falling to the
-# floor we clamped it at: a network trained to convergence drives $\hat\sigma$
-# toward zero on its own training set, and an error bar that small is a
-# terrible prediction for data it has not seen. Under plain MSE this same run
-# showed no turn at all. Early stopping is no longer optional bookkeeping — it
-# picks the only usable network on the curve.
+# **Overfitting, unmistakably.** The training NLL falls without limit, because
+# $\hat\sigma$ tracks training residuals and those keep shrinking as the network
+# memorizes its 300 examples. The validation NLL bottoms out and then leaves the
+# top of the panel: a network claiming precision it achieves only on data it has
+# already seen is a terrible model for data it has not. Early stopping keeps the
+# one network on that curve worth having.
 #
-# The error bars in the left panel are the network's own $\hat\sigma$, and they
-# are honest: their scatter about the diagonal matches their length, and they
-# grow toward high $\nu$, where 30 samples cover fewer points per cycle. Note
-# that this only holds because they were selected on *held-out* data — an
-# uncertainty read off the training set would have been the near-zero one.
-
-# %%
-print(f'mean claimed sigma  {sig_va.mean():.3f} cycles')
-print(f'actual RMSE         {rms:.3f} cycles')
-print(f'pull std            {((mu_va - to_nu(nu_va)) / sig_va).std():.2f}'
-      f'   (1.0 = perfectly calibrated)')
+# **The error bar is one number; the error is not.** The band is the model's
+# $\hat\sigma$, identical at every frequency, while the printout shows the real
+# scatter roughly doubling across the band — 30 samples cover fewer points per
+# cycle as $\nu$ grows. One $\sigma$ for all inputs is the wrong *shape* of
+# answer.
+#
+# What we want is a distribution over $\nu$ that **depends on the data**: wide
+# here, narrow there, and in general curved and multi-modal. That is Part 2.
 
 # %% [markdown]
-# **Exercise 1c.**
-# 1. **Noise.** Raise `sigma` to 0.8 and retrain. Does the scatter widen
-#    uniformly, or worse at some frequencies than others?
-# 2. **Data.** Drop the training set to 50 examples. What happens to the
-#    error bars, and does the pull stay near 1?
-# 3. **A nuisance parameter.** Rebuild with `random_phase=True`. Now the same
-#    frequency produces completely different-looking data and the network has
-#    to become phase-invariant on its own. How much accuracy does that cost?
-#    (Part 4 does exactly this with the phase of its chirp, and the real LISA
-#    analysis with two gauge angles: parameters you must marginalize over but
-#    never infer.)
+# ### Exercise 1
+
+# %% [markdown]
+# `experiment` below re-runs everything with whatever you change. Try:
+#
+# 1. **`patience`** — 20, then 3000. How much accuracy does stopping too early
+#    cost, and how bad does the over-confidence get if you stop too late?
+# 2. **`width`** — 8, then 1024. Does the widest network do worst?
+# 3. **`n_train`** — 100, then 2000. Which improves, the RMSE or the honesty of
+#    $\hat\sigma$?
+# 4. **`nu_hi`** — push the top of the band to 12 cycles (Nyquist is 15). Where
+#    does the estimator fail first, and does $\hat\sigma$ notice?
+# 5. **`random_phase=True`** — now the same frequency can produce completely
+#    different data, and the network has to become phase-invariant on its own.
+#    (Part 4 treats the phase of its chirp exactly this way: a parameter you
+#    must marginalize over but never infer.)
 
 # %%
-# @title Reference solution { display-mode: "form" }
-fig, ax = plt.subplots(1, 3, figsize=(14, 4.3))
-for a, (n, sg, rp, ttl) in zip(ax, [(300, 0.8, False, r'$\sigma$ = 0.8'),
-                                    (50, 0.3, False, 'N = 50'),
-                                    (300, 0.3, True, 'random phase')]):
-    dt, nt = sine_data(n, sigma=sg, seed=0, random_phase=rp)
-    dv, nv = sine_data(2000, sigma=sg, seed=1, random_phase=rp)
-    m = MLP(N_GRID, 2, 256)
-    fit_early(m, dt, nt, dv, nv, loss_fn=gauss_nll, verbose=False)
+def experiment(n_train=300, width=256, patience=300, sigma=0.3,
+               nu_hi=NU_HI, random_phase=False):
+    """Re-run the frequency fit with different settings; returns (RMSE, sigma_hat)."""
+    global NU_HI, SPAN
+    NU_HI, SPAN = nu_hi, nu_hi - NU_LO             # let the band be changed
+    dt, nt = sine_data(n_train, sigma, seed=0, random_phase=random_phase)
+    dv, nv = sine_data(2000, sigma, seed=1, random_phase=random_phase)
+    net = MLP(N_GRID, 1, width)
+    h, bep = fit(net, dt, nt, dv, nv, patience=patience)
     with torch.no_grad():
-        o = m(dv)
-    mu = to_nu(o[:, :1])
-    sig = (NU_HI - NU_LO) * o[:, 1:].clamp(-4.0, 2.0).exp()
-    r = (mu - to_nu(nv)).pow(2).mean().sqrt()
-    pull = ((mu - to_nu(nv)) / sig).std()
-    a.plot([NU_LO, NU_HI], [NU_LO, NU_HI], 'k--', lw=1)
-    a.errorbar(to_nu(nv)[:150, 0], mu[:150, 0], yerr=sig[:150, 0], fmt='C0.',
-               ms=3, lw=.7, alpha=.6)
-    a.set(xlabel=r'true $\nu$ [cycles]', ylabel=r'estimated $\nu$ [cycles]',
-          aspect='equal', title=f'{ttl}\nRMSE {r:.3f}, pull {pull:.2f}')
-fig.tight_layout()
+        r = (SPAN * (net(dv) - nv)).squeeze()
+    rmse, sig = r.pow(2).mean().sqrt().item(), h[bep, 2] * SPAN
+    print(f'  RMSE {rmse:.3f} cycles,  model claims {sig:.3f}  '
+          f'-> off by x{rmse / sig:.2f}')
+    NU_HI, SPAN = 5.0, 4.0                         # restore the defaults
+    return rmse, sig
 
-# %% [markdown]
-# **What you should have found.** More noise widens the error bars everywhere
-# and worst at high frequency. Fewer examples costs accuracy but the pull stays
-# near 1 — the network widens its error bars honestly rather than staying
-# over-confident, which is exactly what the $\log\hat\sigma$ term buys.
-# Randomising the phase costs real accuracy: the network has to discover, from
-# examples alone, a quantity invariant to a parameter it is never asked about.
-#
-# You now have a point estimate *and* an error bar — but only a Gaussian one,
-# symmetric and single-peaked. Real posteriors are curved, multi-modal, and
-# correlated across parameters. Representing *those* is Part 2.
+
+experiment()                                        # <-- change one thing at a time
 
 # %% [markdown]
 # ---
