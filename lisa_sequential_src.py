@@ -396,6 +396,151 @@ fig.tight_layout()
 # The mechanism — buffer, tempered reweighting, warm-started flows, adaptive
 # summaries — is identical.*
 
+# %% [markdown]
+# ---
+# ## 6. What the zoom actually bought
+#
+# "The widths fall" is hard to judge in absolute units — is
+# $\sigma(\log_{10}M_c) = 4\times10^{-4}$ good? The calibrated version is to
+# divide each posterior width by the width of the **prior** it started from.
+# A ratio of 1 means the data told you nothing you did not already assume; a
+# ratio of 0.1 means the observation shrank that parameter tenfold.
+#
+# Round 1 is worth reading as the *amortized* baseline: it trains on
+# simulations drawn from the starting box, which is exactly what a one-shot
+# (non-sequential) analysis would do.
+
+# %%
+prior_sd = (PRIOR_HI - PRIOR_LO) / np.sqrt(12)          # sd of a uniform prior
+ratios = np.array([[post[:, i].std() / prior_sd[i] for i in range(D)]
+                   for post in posts])                  # (n_rounds, D)
+
+fig, ax = plt.subplots(figsize=(7.5, 4.4))
+for i, nm in enumerate(NAMES):
+    ax.semilogy(range(1, len(posts) + 1), ratios[:, i], 'o-', ms=4, label=nm)
+ax.axhline(1, color='r', ls='--', lw=1, label='no better than the prior')
+ax.set(xlabel='round', ylabel='posterior width / prior width',
+       xticks=range(1, len(posts) + 1),
+       title='what each round bought (lower is better)')
+ax.legend(fontsize=8, ncol=2)
+fig.tight_layout()
+
+print(f'{"param":10s}' + ''.join(f'{"round " + str(r + 1):>9s}'
+                                 for r in range(len(posts))))
+for i, nm in enumerate(NAMES):
+    print(f'{nm:10s}' + ''.join(f'{ratios[r, i]:9.2f}' for r in range(len(posts))))
+
+# %% [markdown]
+# Two things to read off. **The one-shot analysis would not have been enough:**
+# after round 1 the chirp mass, the ecliptic longitude and $\sin\beta$ still sit
+# at 0.9–1.0 of their prior widths — the network had barely constrained them.
+# **The zoom is what extracts them:** by the last round every parameter has
+# moved well below 1, several by an order of magnitude, using the same networks
+# and the same per-round simulation budget. Only the training distribution
+# moved.
+#
+# ## 7. Is the answer right?
+#
+# Two checks. The cheap one: this is a known injection, so compare the final
+# posterior with the truth in units of its own width.
+
+# %%
+p_fin = posts[-1]
+print('truth offset in the final round, in posterior sigmas:')
+for i, nm in enumerate(NAMES):
+    z = (p_fin[:, i].mean() - Z_TRUE[i]) / p_fin[:, i].std()
+    flag = '' if abs(z) < 2 else '   <-- check'
+    print(f'  {nm:10s} {z:+6.1f}{flag}')
+
+# %% [markdown]
+# One event is one draw of the noise, so a couple of parameters landing near
+# 1.5σ is expected, not alarming; what would be alarming is *many* parameters
+# far out, which is the signature of an over-confident posterior. The
+# systematic version of this check — repeat over many simulated observations
+# and require the rank of the truth to be uniform — is the coverage test built
+# in Part 3 of the main tutorial, and it is what you would run before
+# publishing.
+#
+# The second check is independent: the production **MCMC** analysis of this
+# same source, by Baker & Marsat, using a *full year* of data. Read the overlay
+# below as a one-sided test — because you used one day and they used a year,
+# your posterior must come out **wider** than theirs. If it ever comes out
+# narrower, you are over-confident, no further diagnostics needed.
+
+# %%
+try:
+    mcmc = np.load('mcmc_dl_cosi_reference.npy')        # (8000, 2): log10 DL, cos i
+except FileNotFoundError:                               # colab: fetch from the repo
+    import urllib.request
+    urllib.request.urlretrieve(
+        'https://raw.githubusercontent.com/cweniger/teaching-2607-LISA-Hackathon/'
+        'main/mcmc_dl_cosi_reference.npy', 'mcmc_dl_cosi_reference.npy')
+    mcmc = np.load('mcmc_dl_cosi_reference.npy')
+
+fig, ax = plt.subplots(figsize=(5.6, 4.6))
+ax.plot(mcmc[:, 0], mcmc[:, 1], '.', ms=1.5, alpha=.15, color='gray',
+        label='reference MCMC (full year)')
+ax.plot(p_fin[:, 0], p_fin[:, 1], 'C0.', ms=1.5, alpha=.2,
+        label=f'this notebook (1 day, round {len(posts)})')
+ax.plot(Z_TRUE[0], Z_TRUE[1], 'r*', ms=15, label='truth')
+ax.set(xlabel=r'$\log_{10} D_L$ [Mpc]', ylabel=r'$\cos\iota$',
+       xlim=(4.3, 5.4), ylim=(-1, 1))
+ax.legend(loc='lower left', fontsize=8)
+ax.set_title('independent check: production MCMC')
+fig.tight_layout()
+
+# %% [markdown]
+# The gray V is the **distance–inclination degeneracy**: a face-on binary far
+# away produces almost the same strain as an edge-on binary nearby, so the data
+# pins a combination of the two rather than either alone. Our posterior sits
+# exactly on that ridge, at the truth — the *location* is right.
+#
+# **And the test fails.** Our blob is far narrower than the reference, when a
+# single day of data should have produced something *wider* than a full year.
+# By the rule stated above, that is over-confidence, and here we know its
+# origin: it is the normalization discrepancy flagged at the top of this
+# notebook. This pipeline measures SNR ≈ 1170 where the LDC-matched production
+# analysis measures ≈ 393, and posterior width scales roughly as 1/SNR, so
+# claiming a three-times-louder signal buys a three-times-tighter posterior we
+# have not earned — enough, here, to collapse a degeneracy the reference cannot
+# resolve.
+#
+# This is worth dwelling on, because it is the honest reason to draw such a
+# plot. Nothing in the loss curves, the widths, or the truth z-scores above
+# hinted at a problem: internally the analysis is perfectly consistent, and it
+# recovers the injected parameters to about 1σ. It takes one comparison against
+# a source of truth *outside* your own pipeline to expose a calibration error
+# — which is precisely why the one-sided check, or the coverage test of the
+# main tutorial's Part 3, belongs in every analysis before any number is
+# quoted. Until the waveform convention is reconciled, read the overlay for the
+# shape and location of the degeneracy, and not for its width.
+#
+# ## 8. The full answer
+#
+# All nine parameters at once — the corner plot a GW analysis actually reports.
+
+# %%
+fig, ax = plt.subplots(D, D, figsize=(13, 13))
+for a in ax.ravel():
+    a.set_xticks([]); a.set_yticks([])
+for i in range(D):
+    for j in range(D):
+        if j > i:
+            ax[i, j].axis('off'); continue
+        if i == j:
+            ax[i, j].hist(p_fin[:, i], bins=40, color='C0', alpha=.85)
+            ax[i, j].axvline(Z_TRUE[i], color='r', lw=1.2)
+        else:
+            ax[i, j].plot(p_fin[:, j], p_fin[:, i], 'C0.', ms=1, alpha=.05)
+            ax[i, j].plot(Z_TRUE[j], Z_TRUE[i], 'r*', ms=7)
+        if i == D - 1:
+            ax[i, j].set_xlabel(NAMES[j], fontsize=7, rotation=30, ha='right')
+        if j == 0 and i > 0:
+            ax[i, j].set_ylabel(NAMES[i], fontsize=7)
+fig.suptitle('MBHB posterior after the zoom, all 9 parameters (red: truth)',
+             y=.93, fontsize=12)
+fig.tight_layout(rect=(0, 0, 1, .94))
+
 # %%
 # (housekeeping cell — saves all figures when executed as a test script;
 # does nothing in an interactive colab session)

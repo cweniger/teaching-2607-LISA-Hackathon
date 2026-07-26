@@ -3,7 +3,7 @@
 #
 # [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb)
 #
-# **LISA tutorial — approximately 115 minutes.**
+# **LISA tutorial — approximately 95 minutes.**
 #
 # | part | idea | new ingredient |
 # |---|---|---|
@@ -11,17 +11,17 @@
 # | 2 | fit a *distribution* | flow matching (FM), conditioning |
 # | 3 | fit a *posterior*: feed FM pairs from a simulator | SBI, amortization |
 # | 4 | a toy gravitational wave | data compression + **sequential** inference |
-# | 5 | the real thing: a massive black-hole binary in LISA data | (pre-simulated) |
 #
 # Each part fixes the visible failure of the one before. All code is plain
-# PyTorch — the same ~10-line loss function you meet in Part 2 analyzes the
-# LISA signal in Part 5.
+# PyTorch, and the companion notebook `lisa_sequential.ipynb` runs the very
+# same functions on real LISA data.
 #
 # > **Colab setup:** Runtime → Change runtime type → **T4 GPU**, then run all
 # > cells top to bottom. Everything also works on CPU, just slower.
 
 # %%
 import copy
+import os
 import time
 
 import numpy as np
@@ -511,8 +511,9 @@ fig.tight_layout()
 # 3. **A nuisance parameter.** Rebuild with `random_phase=True`. Now the same
 #    frequency produces completely different-looking data and the network has
 #    to become phase-invariant on its own. How much accuracy does that cost?
-#    (Part 4 does exactly this with the phase of its chirp, and Part 5 with two
-#    LISA gauge angles: parameters you must marginalize over but never infer.)
+#    (Part 4 does exactly this with the phase of its chirp, and the real LISA
+#    analysis with two gauge angles: parameters you must marginalize over but
+#    never infer.)
 
 # %%
 # @title Reference solution { display-mode: "form" }
@@ -698,7 +699,7 @@ fig.tight_layout()
 # ## The implementation
 #
 # Four short functions. They are used unchanged for the rest of the notebook,
-# including the LISA example in Part 5. `cond` is the conditioning input; leave
+# including the companion LISA notebook. `cond` is the conditioning input; leave
 # it `None` for now (we use it in the second half of this part).
 
 # %%
@@ -1019,8 +1020,8 @@ fig.tight_layout()
 #   point alone.
 #
 # This is the everyday reality of GW parameter estimation in miniature. (The
-# distance–inclination degeneracy you will meet in Part 5 is exactly this: a
-# face-on binary far away looks like an edge-on binary nearby.)
+# distance–inclination degeneracy of a real black-hole binary is exactly this:
+# a face-on binary far away looks like an edge-on binary nearby.)
 
 # %%
 G = 9.81
@@ -1572,113 +1573,21 @@ fig.tight_layout()
 
 # %% [markdown]
 # ---
-# # Part 5 — The real thing: a massive black-hole binary in LISA data  *(~20 min)*
+# # Where next: the real thing, live
 #
-# Same code, real problem: **LDC1-1 (Radler)** — one day of simulated LISA
-# data containing a merging massive black-hole binary at SNR ~260. What
-# changes compared to the toy:
+# You now have every piece of a production simulation-based-inference
+# pipeline: a density model that can represent awkward shapes (Part 2), a way
+# to turn it into a posterior by feeding it simulator output (Part 3), and the
+# compression plus sequential zoom that make it work when the posterior is a
+# needle in the prior's haystack (Part 4).
 #
-# | | toy chirp | MBHB |
-# |---|---|---|
-# | data | 1024 samples | 2 TDI channels × 8640 samples, whitened |
-# | parameters | 2 (+1 nuisance) | 9 (+2 gauge nuisances) |
-# | simulator | 1 line | IMRPhenomD + LISA response (seconds/waveform) |
-# | summaries | 32 PCA | 64 PCA |
+# The companion notebook **`lisa_sequential.ipynb`** runs exactly this on real
+# LISA data: the LDC1-1 (Radler) massive black-hole binary, nine parameters,
+# with the waveforms simulated *live* by `lisabeta` inside the zoom loop. It
+# uses the same `fm_loss`, the same `VelocityNet`, the same `fm_sample` and
+# `fm_logprob` you have here — about three minutes end to end.
 #
-# Because the waveform model needs a compiled stack, the training bank is
-# **pre-simulated** (32768 sims from a narrowed prior; the script
-# `make_tutorial_simbank.py` in this folder regenerates it). Everything you
-# *run* here — compression, `fm_loss`, training, sampling — is identical to
-# what you already built.
-
-# %%
-# Get mbhb_simbank.npz (~12 MB). Three options, tried in order:
-#   1. it is already next to this notebook (cluster / manual upload)
-#   2. download from Google Drive: paste the file id you were given
-#   3. colab upload widget
-import os
-
-BANK = 'mbhb_simbank.npz'
-GDRIVE_FILE_ID = ''          # <-- tutor: paste the Drive file id here
-
-if not os.path.exists(BANK):
-    for cand in ('mbhb_simbank.npz',):
-        if os.path.exists(cand):
-            BANK = cand
-            break
-if not os.path.exists(BANK) and GDRIVE_FILE_ID:
-    import gdown                                   # pre-installed on colab
-    gdown.download(id=GDRIVE_FILE_ID, output=BANK, quiet=False)
-if not os.path.exists(BANK):
-    try:
-        from google.colab import files             # last resort: manual upload
-        print('please upload mbhb_simbank.npz')
-        files.upload()
-    except ImportError:
-        raise FileNotFoundError('mbhb_simbank.npz not found — generate it with '
-                                'make_tutorial_simbank.py or set GDRIVE_FILE_ID')
-
-bank = np.load(BANK, allow_pickle=False)
-names = [str(n) for n in bank['names']]
-print('parameters:', names)
-print('training bank:', bank['z_train'].shape, '->', bank['s_train'].shape)
-
-# %%
-fig, ax = plt.subplots(1, 2, figsize=(11, 3))
-ax[0].plot(bank['x_obs'][0], lw=.4, label='observed (A channel, whitened)')
-ax[0].plot(bank['x_clean_true'][0], 'C1', lw=.8, label='hidden signal')
-ax[0].legend(loc='upper left', fontsize=8)
-ax[0].set(xlabel='sample (dt = 10 s)', title='one day of LISA data')
-ax[1].semilogy(bank['pca_eigs'])
-ax[1].axhline(1, color='r', ls='--', lw=1); ax[1].axvline(64, color='k', ls=':', lw=1)
-ax[1].set(xlabel='PCA component', ylabel='component SNR', title='summary spectrum (64 kept)')
-fig.tight_layout()
-
-# %%
-z = torch.tensor(bank['z_train'], device=dev)
-s = torch.tensor(bank['s_train'], device=dev)
-zmu, zsd = z.mean(0), z.std(0)
-smu, ssd = s.mean(0), s.std(0) + 1e-6
-
-mnet = VelocityNet(9, 64, hidden=256, layers=4).to(dev)
-train_fm(mnet, zscore(z, zmu, zsd), zscore(s, smu, ssd), steps=4000, batch=512)
-
-s_obs_t = zscore(torch.tensor(bank['s_obs'], device=dev)[None], smu, ssd)
-post = (fm_sample(mnet, s_obs_t.expand(20000, 64), 9) * zsd + zmu).cpu().numpy()
-
-# %%
-zt = bank['z_true']
-fig, ax = plt.subplots(figsize=(5.6, 4.6))
-ax.plot(bank['mcmc_dl_cosi'][:, 0], bank['mcmc_dl_cosi'][:, 1], '.', ms=1.5,
-        alpha=.15, color='gray', label='reference MCMC (full year of data)')
-ax.plot(post[:, 0], post[:, 1], 'C0.', ms=1.5, alpha=.15, label='your posterior (1 day)')
-ax.plot(zt[0], zt[1], 'r*', ms=15, label='truth')
-ax.set(xlabel=r'$\log_{10} D_L$ [Mpc]', ylabel=r'$\cos\iota$',
-       xlim=(4.3, 5.4), ylim=(-1, 1))
-ax.legend(loc='lower left', fontsize=8)
-ax.set_title('distance–inclination degeneracy of a real MBHB')
-fig.tight_layout()
-
-# %% [markdown]
-# You just inferred the parameters of a massive black-hole binary — with the
-# ten-line loss from Part 2. The X-shaped structure is the famous
-# **distance–inclination degeneracy**: a face-on binary far away looks like an
-# edge-on binary nearby. Note your posterior is honestly *wider* than the gray
-# reference — that analysis used a full year of data, you used one day.
-#
-# **Exercise 5.**
-# 1. Plot other 2-D marginals (e.g. chirp mass vs symmetric mass ratio,
-#    columns 2 & 3 — masses to five digits from one day of data!). Add the
-#    truth marker. Which parameters are tight, which are degenerate?
-# 2. The truth star sits slightly off your posterior median in $D_L$. Is that
-#    a bug? (Hint: there is exactly one noise realization in `x_obs`. What
-#    would you expect the *distribution* of median-vs-truth offsets to look
-#    like over many noise realizations?)
-# 3. *(discussion)* This was amortized inference at a narrowed prior. What
-#    would you need to add to run it from the *full* prior? (Everything from
-#    Part 4: sequential zoom + adaptive summaries. That is what the `falcon`
-#    package automates — and with the late-time trick from Exercise 4.3 it
-#    reaches posteriors ~1 nat from the information-theoretic optimum.)
+# [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_sequential.ipynb)
 #
 # ---
 # ## Where to go from here
