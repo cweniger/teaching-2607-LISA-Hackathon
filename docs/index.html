@@ -19,11 +19,23 @@
 
     <section class="title-slide">
       <div class="stack">
-        <h1 style="text-align:left; font-size:2.5em">Active Learning from Simulations</h1>
-        <h3 style="text-align:left; font-size:1.9em;">Sequential simulation-based inference for GW analysis</h3>
+        <h1 style="text-align:left; font-size:2.5em">Learning from Simulations</h1>
+        <h3 style="text-align:left; font-size:1.9em;">Simulation-based inference for gravitational-wave data analysis</h3>
         <p class="title-meta">
           Christoph Weniger &mdash; University of Amsterdam (GRAPPA)<br>
           LISA Hackathon &mdash; 27 July 2026<br><span style="color:#2980b9;">Concept lecture (30 min) before the hands-on tutorial</span>
+        </p>
+        <p style="text-align:left; font-size:0.62em; color:#7f8c8d; line-height:1.5; margin-top:18px;">
+          <strong style="color:#2c3e50;">With:</strong>
+          James Alvey (University of Cambridge, Kavli Institute for Cosmology) &middot;
+          Noemi Anau Montel (Max Planck Institute for Astrophysics, Garching) &middot;
+          Uddipta Bhardwaj (ETH Zurich, Institute for Particle Physics and Astrophysics) &middot;
+          Philippa S. Cole (Queen Mary University of London) &middot;
+          Huifang Lyu (University of Amsterdam) &middot;
+          Benjamin Kurt Miller (Meta) &middot;
+          Joy Sanghavi (University of Amsterdam) &middot;
+          Oleg Savchenko (University of Amsterdam, GRAPPA) &middot;
+          Lorenzo Speri (European Space Agency)
         </p>
       </div>
     </section>
@@ -37,6 +49,7 @@
       <div class="stack">
         <div class="grad-bar"></div>
         <h1>Introduction &amp; Motivation</h1>
+        <p>Better instruments improve precision &mdash; and complicate inference.</p>
         <div class="grad-bar below"></div>
       </div>
     </section>
@@ -142,7 +155,7 @@
       <div class="stack">
         <div class="grad-bar"></div>
         <h1>Simulation-based inference</h1>
-        <p>Using interpretative and generative AI to perform statistical analyses</p>
+        <p>Using interpretative and generative AI to perform complex scientific analyses</p>
         <div class="grad-bar below"></div>
       </div>
     </section>
@@ -1407,6 +1420,9 @@
         </div>
 
       </div>
+      <p class="fragment" style="text-align:center; margin-top:8px; font-size:0.82em; color:#2c3e50;">
+        Both maps are trained end to end by a single gradient \(\nabla_\phi \mathcal{L}\): no hand-picked summary, no \(\varepsilon\), no accept / reject.
+      </p>
     </section>
 
     <script>
@@ -1453,78 +1469,141 @@
     <!-- Simulation-based inference: SBI Bayesian/freq (PDF p19) -->
     
 
+<section>
+      <p class="eyebrow">Foundations of SBI &gt; The general recipe</p>
+      <h2>Simulation-based inference</h2>
+      <p class="subtitle" style="margin-top:0;">Solving Bayesian (&amp; Frequentist) inference problems based on simulation output</p>
+      <div style="text-align:center; margin:10px 0 8px;">
+        \[ q_\phi(\mathbf{z}\mid\mathbf{x}) \;\simeq\; \frac{p(\mathbf{x}\mid\mathbf{z})\,p(\mathbf{z})}{p(\mathbf{x})} \]
+      </div>
+      <div style="display:flex; gap:14px; align-items:flex-start; margin-top:6px;">
+        <div style="flex:1; text-align:center;">
+          <img src="img/p19_software.png" style="width:100%; max-height:310px; object-fit:contain;">
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center;">
+          <p style="font-size:0.85em; margin:0 0 6px;">Hundreds of method &amp; application papers</p>
+          <img src="img/p19_methods.png" style="width:100%; max-height:280px; object-fit:contain;">
+        </div>
+      </div>
+      <p style="font-size:0.65em; color:#7f8c8d; text-align:left; margin:4px 0 0;">
+        github.com/smsharma/awesome-neural-sbi
+        <span style="color:#95a0a8;">&middot; see also Cranmer, Brehmer &amp; Louppe 2020, arXiv:1911.01429</span>
+      </p>
+    </section>
+
+    <!-- SBI: lower simulation costs (PDF p23) -->
     
 
     <!-- ============================================================ -->
     <!-- FLOW MATCHING (new for the hackathon deck)                   -->
     <!-- ============================================================ -->
 
-    <!-- FM 1 — why representing a density is the hard part -->
+    <!-- FM 1a — why representing a density is the hard part -->
     <section>
       <p class="eyebrow">Foundations of SBI &gt; Flow matching</p>
       <h2>The hard part: <em style="font-style:normal; color:#2980b9;">representing</em> a probability density</h2>
       <p class="subtitle" style="margin-top:0;">A prior, a likelihood, a posterior, an evidence &mdash; all of statistics is a statement about distributions.</p>
 
-      <div style="display:flex; gap:22px; margin-top:8px; align-items:flex-start;">
+      <div style="font-size:0.86em; line-height:1.5; margin-top:14px;">
+        <p style="margin:0 0 10px;">
+          In Part&nbsp;1 an MLP fitted a <em>function</em>: one number \(y\) for each input \(x\).
+          We now want it to fit a <em>distribution</em>,
+          \( q_\phi(\theta) \approx p(\theta) \), given only <strong>samples</strong> of \(p\).
+          That is a far more constrained object.
+        </p>
 
-        <div style="flex:0.92; font-size:0.78em; line-height:1.45;">
-          <p style="margin:0 0 6px;">
-            We need to approximate
-            <em>probability distributions</em>, \( q_\phi(\theta \mid x) \approx p(\theta \mid x) \). Those are constrained objects:
-          </p>
-          <ul style="margin:0 0 8px; padding-left:1.1em;">
-            <li><strong>non-negative</strong>, \(q_\phi(\theta)\ge 0\) &mdash; easy, exponentiate;</li>
-            <li><strong>normalized</strong>, \(\int q_\phi(\theta)\,d\theta = 1\) &mdash; a
-                <span class="highlight">global</span> constraint: change the network anywhere
-                and the integral changes everywhere.</li>
-          </ul>
-          <p style="margin:0 0 6px;">And we need <em>two</em> operations, both fast, both called millions of times:</p>
-          <div class="box box-blue" style="margin:6px 0; padding:9px 13px;">
-            <strong>evaluate</strong> &mdash; given \(\theta\), return \(q_\phi(\theta)\)
-            <span style="color:#7f8c8d;">(weights, likelihoods, model comparison)</span><br>
-            <strong>sample</strong> &mdash; draw fresh \(\theta \sim q_\phi\)
-            <span style="color:#7f8c8d;">(error bars, corner plots, error propagation)</span>
+        <div style="display:flex; gap:20px; margin-top:14px; align-items:stretch;">
+
+          <div style="flex:1;">
+            <p style="margin:0 0 6px; font-family:'Space Grotesk',sans-serif; font-weight:700;
+                      font-size:0.8em; color:#7f8c8d; letter-spacing:0.1em; text-transform:uppercase;">
+              What a density must satisfy</p>
+            <div class="box" style="margin:0; height:calc(100% - 28px); box-sizing:border-box;">
+              <p style="margin:0 0 8px;">
+                <strong>Non-negative</strong>, \(q_\phi(\theta)\ge 0\).<br>
+                <span style="color:#7f8c8d;">Easy &mdash; exponentiate.</span>
+              </p>
+              <p style="margin:0;">
+                <strong>Normalized</strong>, \(\int q_\phi(\theta)\,d\theta = 1\).<br>
+                <span style="color:#7f8c8d;">Hard. This is a <span class="highlight">global</span>
+                constraint: change the network anywhere and the integral changes everywhere.
+                So you cannot simply declare an MLP's output to be a density and train it.</span>
+              </p>
+            </div>
+          </div>
+
+          <div style="flex:1;">
+            <p style="margin:0 0 6px; font-family:'Space Grotesk',sans-serif; font-weight:700;
+                      font-size:0.8em; color:#7f8c8d; letter-spacing:0.1em; text-transform:uppercase;">
+              And two operations, both fast</p>
+            <div class="box box-blue" style="margin:0; height:calc(100% - 28px); box-sizing:border-box;">
+              <p style="margin:0 0 8px;">
+                <strong>Evaluate</strong> &mdash; given \(\theta\), return \(q_\phi(\theta)\).<br>
+                <span style="color:#7f8c8d;">Importance weights, likelihoods, model comparison.</span>
+              </p>
+              <p style="margin:0;">
+                <strong>Sample</strong> &mdash; draw fresh \(\theta \sim q_\phi\).<br>
+                <span style="color:#7f8c8d;">Error bars, corner plots, propagating uncertainty.</span>
+              </p>
+            </div>
           </div>
         </div>
 
-        <div style="flex:1.08;">
-          <table style="width:100%; border-collapse:collapse; font-size:0.7em; line-height:1.3;">
-            <tr style="background:#ecf0f1;">
-              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">representation</th>
-              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">flexible?</th>
-              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">evaluate</th>
-              <th style="text-align:left; padding:6px 8px; font-family:'Space Grotesk',sans-serif;">sample</th>
-            </tr>
-            <tr style="border-bottom:1px solid #e5e8ea;">
-              <td style="padding:6px 8px;"><strong>Gaussian head</strong><br><span style="color:#7f8c8d;">predict \(\mu,\Sigma\)</span></td>
-              <td style="padding:6px 8px; color:#c0392b;">almost nothing</td>
-              <td style="padding:6px 8px; color:#27ae60;">exact, instant</td>
-              <td style="padding:6px 8px; color:#27ae60;">exact, instant</td>
-            </tr>
-            <tr style="border-bottom:1px solid #e5e8ea;">
-              <td style="padding:6px 8px;"><strong>Energy-based</strong><br><span style="color:#7f8c8d;">\(q_\phi \propto e^{-E_\phi(\theta)}\)</span></td>
-              <td style="padding:6px 8px; color:#27ae60;">unrestricted</td>
-              <td style="padding:6px 8px; color:#e67e22;">up to unknown \(Z\)</td>
-              <td style="padding:6px 8px; color:#c0392b;">MCMC &mdash; slow</td>
-            </tr>
-            <tr style="border-bottom:1px solid #e5e8ea;">
-              <td style="padding:6px 8px;"><strong>Normalizing flow</strong><br><span style="color:#7f8c8d;">invertible layers</span></td>
-              <td style="padding:6px 8px; color:#e67e22;">architecture-limited</td>
-              <td style="padding:6px 8px; color:#27ae60;">exact</td>
-              <td style="padding:6px 8px; color:#27ae60;">exact</td>
-            </tr>
-            <tr style="background:#eaf3fb; border-left:4px solid #2980b9;">
-              <td style="padding:7px 8px;"><strong>Flow matching</strong><br><span style="color:#7f8c8d;">learn a velocity field</span></td>
-              <td style="padding:7px 8px; color:#27ae60;">unrestricted MLP</td>
-              <td style="padding:7px 8px; color:#e67e22;">ODE solve</td>
-              <td style="padding:7px 8px; color:#27ae60;">ODE solve</td>
-            </tr>
-          </table>
-          <p style="font-size:0.72em; color:#34495e; margin:10px 2px 0; line-height:1.4;">
-            Flow matching buys an <strong>unrestricted network</strong>, genuine samples and a
-            normalized density &mdash; and trains by <strong>plain regression</strong>.
-            The price: sampling is an ODE solve, not one forward pass.
-          </p>
+        <p style="margin:16px 0 0;">
+          Both get called <strong>millions of times</strong> in a real analysis, so &ldquo;fast&rdquo;
+          is part of the specification, not a nicety. No classical representation gives you
+          all of this at once.
+        </p>
+      </div>
+    </section>
+
+    <!-- FM 1b — the four representations -->
+    <section>
+      <p class="eyebrow">Foundations of SBI &gt; Flow matching</p>
+      <h2>Four ways to represent a density &mdash; and what each <em style="font-style:normal; color:#c0392b;">gives up</em></h2>
+
+      <table style="width:100%; border-collapse:collapse; font-size:0.84em; line-height:1.35; margin-top:14px;">
+        <tr style="background:#ecf0f1;">
+          <th style="text-align:left; padding:9px 12px; width:30%; font-family:'Space Grotesk',sans-serif;">representation</th>
+          <th style="text-align:left; padding:9px 12px; font-family:'Space Grotesk',sans-serif;">flexible?</th>
+          <th style="text-align:left; padding:9px 12px; font-family:'Space Grotesk',sans-serif;">evaluate</th>
+          <th style="text-align:left; padding:9px 12px; font-family:'Space Grotesk',sans-serif;">sample</th>
+        </tr>
+        <tr style="border-bottom:1px solid #e5e8ea;">
+          <td style="padding:11px 12px;"><strong>Gaussian head</strong><br><span style="color:#7f8c8d; font-size:0.88em;">network predicts \(\mu,\Sigma\)</span></td>
+          <td style="padding:11px 12px; color:#c0392b;">almost nothing</td>
+          <td style="padding:11px 12px; color:#27ae60;">exact, instant</td>
+          <td style="padding:11px 12px; color:#27ae60;">exact, instant</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e5e8ea;">
+          <td style="padding:11px 12px;"><strong>Energy-based</strong><br><span style="color:#7f8c8d; font-size:0.88em;">\(q_\phi \propto e^{-E_\phi(\theta)}\)</span></td>
+          <td style="padding:11px 12px; color:#27ae60;">unrestricted</td>
+          <td style="padding:11px 12px; color:#e67e22;">only up to \(Z\)</td>
+          <td style="padding:11px 12px; color:#c0392b;">MCMC &mdash; slow</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e5e8ea;">
+          <td style="padding:11px 12px;"><strong>Normalizing flow</strong><br><span style="color:#7f8c8d; font-size:0.88em;">invertible layers, tractable Jacobian</span></td>
+          <td style="padding:11px 12px; color:#e67e22;">architecture-limited</td>
+          <td style="padding:11px 12px; color:#27ae60;">exact</td>
+          <td style="padding:11px 12px; color:#27ae60;">exact</td>
+        </tr>
+        <tr style="background:#eaf3fb;">
+          <td style="padding:12px; border-left:4px solid #2980b9;"><strong>Flow matching</strong><br><span style="color:#7f8c8d; font-size:0.88em;">learn a velocity field</span></td>
+          <td style="padding:12px; color:#27ae60;">unrestricted MLP</td>
+          <td style="padding:12px; color:#e67e22;">ODE solve</td>
+          <td style="padding:12px; color:#27ae60;">ODE solve</td>
+        </tr>
+      </table>
+
+      <div style="display:flex; gap:18px; margin-top:16px; font-size:0.82em;">
+        <div class="box box-blue" style="flex:1.25; margin:0;">
+          <strong>Flow matching is the current answer.</strong> An unrestricted network, genuine
+          samples, a normalized density &mdash; and a training objective that is
+          <strong>plain regression</strong>, the same <code>fit</code> loop as Part&nbsp;1.
+        </div>
+        <div class="box box-orange" style="flex:1; margin:0;">
+          <strong>The price.</strong> Sampling costs an <em>ODE solve</em> rather than a single
+          forward pass, and the density needs a second, backward solve.
         </div>
       </div>
     </section>
@@ -1540,7 +1619,7 @@
         <div style="flex:1.15; font-size:0.76em; line-height:1.4;">
           <p style="margin:0 0 4px;">
             The motion is a <strong>velocity field</strong> \(v_\phi(\theta,t)\) &mdash;
-            a simple MLP, taking a position \(\theta\) and a time
+            an MLP exactly like Part&nbsp;1's, taking a position \(\theta\) and a time
             \(t\in[0,1]\). Write \(\theta_0\sim\mathcal N(0,I)\) for a noise point and
             \(\theta_1\sim p\) for a data point.
           </p>
@@ -1567,6 +1646,28 @@
           </div>
         </div>
 
+        <div style="flex:0.85;">
+          <div style="background:#2c3e50; border-radius:8px; padding:11px 13px; margin-top:2px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.6em; color:#95a5a6;
+                        letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">Equation 1, verbatim</div>
+<pre style="margin:0; background:none; box-shadow:none;"><code style="font-size:0.52em; line-height:1.45; color:#ecf0f1; background:none;">def fm_loss(net, th1, cond=None):
+    th0 = torch.randn_like(th1)
+    t   = torch.rand(len(th1), 1)
+    tht = (1 - t) * th0 + t * th1
+    v   = net(tht, t, cond)
+    return ((v - (th1 - th0))**2).mean()</code></pre>
+          </div>
+          <p style="font-size:0.7em; color:#34495e; margin:9px 2px 0; line-height:1.4;">
+            Note what is <em>absent</em>: no integration, no samples from the model, no density,
+            no Jacobian. It is Part&nbsp;1's regression loss with a fancier target &mdash; and it is
+            the <strong>same six lines</strong> that will analyze a LISA signal in Part&nbsp;5.
+          </p>
+          <div class="box box-orange" style="margin-top:9px; padding:9px 13px; font-size:0.72em;">
+            <em>Why</em> regressing onto straight lines between <strong>unrelated</strong> random pairs
+            yields a field that transports \(\mathcal N(0,I)\) to \(p\) is genuinely non-obvious.
+            Take it as a black box with three knobs &mdash; the three equations are all of them.
+          </div>
+        </div>
       </div>
 
       <p style="font-size:0.6em; color:#7f8c8d; text-align:left; margin:6px 0 0;">
@@ -1594,7 +1695,7 @@
           </p>
           <p style="margin:0 0 7px;">
             <strong>Right:</strong> what the <em>average</em> of those arrows does. Integrating
-            \(d\theta/dt = v(\theta,t)\) carries a Gaussian blob (t=0) onto the target (t=1).
+            \(d\theta/dt = v^\star(\theta,t)\) carries a Gaussian blob (t=0) onto the target (t=1).
             The crossings average out; the transport does not.
           </p>
 
@@ -1616,12 +1717,19 @@
             </div>
           </div>
 
-          <p style="margin:11px 0 0; font-size:0.85em; color:#7f8c8d; font-style:italic;">
-            The field shown is the <em>exact</em> flow-matching optimum for the plotted sample set
-            (closed form for an empirical target), so this is the flow a perfectly trained network
-            would produce &mdash; nothing here is fitted.
-          </p>
-          <p style="margin:6px 0 0; font-size:0.78em; color:#95a0a8;">
+          <div class="box box-orange" style="margin:12px 0 0; padding:10px 13px; font-size:0.9em;">
+            <strong>No network is being trained here.</strong> For the straight-line interpolant and
+            a finite sample set \(\{\theta_1^j\}\), the minimiser of the flow-matching loss is known
+            in closed form,
+            <div style="text-align:center; margin:2px 0 0;">
+              \[ v^\star(\theta,t) = \sum_j w_j\,\frac{\theta_1^j - \theta}{1-t},
+                 \qquad w_j \propto \mathcal N\big(\theta;\, t\,\theta_1^j,\, (1-t)^2 I\big) \]
+            </div>
+            <span style="color:#7f8c8d;">so the browser evaluates \(v^\star\) directly, 420 particles
+            per frame. You are watching the field a <em>perfectly</em> trained network converges to
+            &mdash; the real thing in the notebook is an MLP regressed onto exactly these arrows.</span>
+          </div>
+          <p style="margin:7px 0 0; font-size:0.78em; color:#95a0a8;">
             Both targets are shapes you meet in GW parameter estimation: a curved degeneracy, and
             multi-modality along a curve.
           </p>
@@ -1637,7 +1745,7 @@
           </div>
           <div style="flex:1; background:#fff; border:1px solid #e5e8ea; border-radius:8px; padding:6px;">
             <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:0.62em;
-                        color:#34495e; margin:0 0 3px 4px;">Sampling &nbsp;&middot;&nbsp; Euler steps of \(v(\theta,t)\)</div>
+                        color:#34495e; margin:0 0 3px 4px;">Sampling &nbsp;&middot;&nbsp; Euler steps of \(v^\star(\theta,t)\)</div>
             <canvas id="fm-cv-flow" width="600" height="600"
                     style="width:100%; height:auto; display:block; border-radius:5px;"></canvas>
           </div>
@@ -1915,6 +2023,27 @@
           </p>
         </div>
 
+        <div style="flex:0.95;">
+          <div style="background:#2c3e50; border-radius:8px; padding:11px 13px;">
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.6em; color:#95a5a6;
+                        letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">The whole change</div>
+<pre style="margin:0; background:none; box-shadow:none;"><code style="font-size:0.52em; line-height:1.5; color:#ecf0f1; background:none;">theta = prior.sample(N)          <span style="color:#7f8c8d;"># parameters</span>
+x     = simulator(theta)         <span style="color:#7f8c8d;"># data</span>
+
+net   = VelocityNet(d_theta,
+                    <span style="color:#f39c12;">d_cond=d_x</span>)  <span style="color:#7f8c8d;"># &lt;- only edit</span>
+train_fm(net, theta, <span style="color:#f39c12;">cond=x</span>)
+
+<span style="color:#7f8c8d;"># posterior for a new observation:</span>
+post = fm_sample(net, <span style="color:#f39c12;">x_obs</span>, d_theta)</code></pre>
+          </div>
+          <div class="box box-green" style="margin-top:11px; font-size:0.72em;">
+            <strong>Why this scales to LISA.</strong> \(x\) is high-dimensional, so in practice we
+            condition on a learned or linear <em>compression</em> of the data (Part&nbsp;4: PCA), and
+            we focus the prior where the signal lives (<em>sequential</em> SBI, next). The loss
+            never changes.
+          </div>
+        </div>
       </div>
     </section>
 
