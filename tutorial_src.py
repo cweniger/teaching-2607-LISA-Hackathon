@@ -1331,7 +1331,7 @@ def fm_logprob(net, w1, cond, steps=64):
 
 # %%
 
-def sequential_chirp(n_rounds=8, gamma=0.5, n_keep=2048, refit_pca=True,
+def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
                      loss_fn=fm_loss, verbose=True):
     torch.manual_seed(1)
     buf_theta = draw_prior(4096)
@@ -1355,7 +1355,7 @@ def sequential_chirp(n_rounds=8, gamma=0.5, n_keep=2048, refit_pca=True,
         so = zscore(summarize(x_obs_chirp, mu, V), smu, ssd)
         # -- continue training conditional q_c(theta|s) and marginal q_m(theta)
         for net, opt, cond in [(qc, opt_c, sc), (qm, opt_m, torch.zeros_like(sc))]:
-            for step in range(800):
+            for step in range(500):
                 i = torch.randint(0, len(w1), (256,), device=dev)
                 loss = loss_fn(net, w1[i], cond[i])
                 opt.zero_grad(); loss.backward(); opt.step()
