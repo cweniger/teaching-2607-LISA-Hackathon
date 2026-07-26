@@ -18,15 +18,16 @@
 # on); the GPU does the flow training and density evaluation, the CPU the
 # waveforms.
 #
-# **Two honest caveats.** (i) More training is *not* better here. With
-# `N_STEPS` doubled, the flows sharpen, the importance weights degenerate
-# (readout ESS falls by an order of magnitude) and the widths get *worse* round
-# over round — there is no validation set or early stopping in this stripped
-# version to catch that. (ii) The posteriors come out several times tighter
-# than the production analysis of the same source. `SIGNAL_SCALE` matches the
-# global SNR (394 vs 393), but the two stacks' noise PSDs differ over ~7% of
-# the band, so no single constant makes them equivalent. Read this notebook for
-# the *mechanism*, not for the physics numbers.
+# **One honest caveat.** More training is *not* better here. With `N_STEPS`
+# doubled, the flows sharpen, the importance weights degenerate (readout ESS
+# falls by an order of magnitude) and the widths get *worse* round over round —
+# there is no validation set or early stopping in this stripped version to
+# catch that.
+#
+# With the orbit and normalisation set as below, the posteriors track the
+# production pipeline on the same source: at round 1, sd(log10 D_L) 0.186 vs
+# 0.191 and sd(cos iota) 0.511 vs 0.540; sd(log10 Mc) 1.0e-3 -> 6e-4 over four
+# rounds, against 1.0e-3 -> 7e-4.
 
 # %%
 import importlib.util
@@ -66,23 +67,33 @@ print(f'device: {dev}')
 # The prior is the MCMC-narrowed box of the production campaign — distance,
 # inclination and sky still wide open, chirp mass known to ~0.4%.
 #
-# `SIGNAL_SCALE` below is the one physics-relevant deviation from a naive
-# setup: this simplified stack gives the source SNR ~1170, whereas the
-# production analysis, whose conventions are carefully matched to the LDC data,
-# measures ~393 for the same extract (a roughly constant waveform-normalisation
-# factor). Scaling the whitened signal down by that ratio puts the *information
-# content* — and therefore the posterior widths — on the production footing.
-# Set it to 1.0 to recover the un-matched behaviour.
+# Two settings below make this match the production analysis of the same
+# source, and both matter:
+#
+# `TC_ABS` — the LISA constellation moves. lisabeta's `t0` says which point of
+# the orbit the data window sits at, and leaving it at the default puts the
+# constellation ~0.8 years away from where the LDC data actually is. That is
+# not a normalisation: the antenna pattern changes, so the E channel comes out
+# 4.8x too strong relative to A and everything lands 480 s late. Since cos(iota)
+# is constrained through the *polarisation* content rather than the total
+# amplitude, getting this wrong specifically distorts the distance-inclination
+# posterior. We set t0 so that the window sits at the LDC coalescence time.
+#
+# `SIGNAL_SCALE` — with the orbit right, this stack still gives ~1.25x the
+# production SNR (whitening-convention bookkeeping). One constant fixes it.
+# Set both to their "naive" values (t0 absent, SIGNAL_SCALE = 1) and the SNR
+# comes out 3x too high with the polarisations scrambled.
 
 # %%
 T_OBS, DT = 86400.0, 10.0
 N_T = int(T_OBS / DT)
 freqs = np.fft.rfftfreq(N_T, d=DT)
 YEAR = 31558149.8
-SIGNAL_SCALE = 393.0 / 1170.0        # -> production SNR; 1.0 = raw conventions
+TC_ABS = 24_960_000.0                # LDC1-1 MBHB CoalescenceTime [s]
+SIGNAL_SCALE = 0.815                 # -> production SNR (390) once t0 is set
 
-wvf_pars = dict(minf=1e-5, maxf=0.1, timetomerger_max=(T_OBS / 2) / YEAR,
-                tmax=T_OBS / YEAR, TDI='TDIAET', acc=1e-4,
+wvf_pars = dict(minf=1e-5, maxf=0.1, timetomerger_max=1.0,
+                TDI='TDIAET', acc=1e-4,
                 approximant='IMRPhenomD',
                 LISAconst=pyresponse.LISAconstProposal,
                 responseapprox='full', frozenLISA=False, TDIrescaled=False)
@@ -124,11 +135,14 @@ def sim_one(z9, phi, psi):
     Mc = 10 ** lmc
     Mtot = Mc / eta ** 0.6
     m1 = 0.5 * Mtot * (1 + np.sqrt(1 - 4 * eta))
-    p = {'m1': m1, 'm2': Mtot - m1, 'chi1': a1, 'chi2': a2,
-         'Deltat': T_OBS / 2 + tc * YEAR, 'dist': 10 ** dl,
-         'inc': np.arccos(ci), 'phi': phi, 'lambda': lam,
-         'beta': np.arcsin(sb), 'psi': psi}
-    h = lisa.GenerateLISATDIFreqseries_SMBH(p, freqs, **wvf_pars)[(2, 2)]
+    Deltat = T_OBS / 2 + tc * YEAR
+    p = {'m1': float(m1), 'm2': float(Mtot - m1), 'chi1': float(a1),
+         'chi2': float(a2), 'Deltat': float(Deltat), 'dist': float(10 ** dl),
+         'inc': float(np.arccos(ci)), 'phi': float(phi), 'lambda': float(lam),
+         'beta': float(np.arcsin(sb)), 'psi': float(psi)}
+    # t0 places the data window on the real LISA orbit (see note in section 1)
+    h = lisa.GenerateLISATDIFreqseries_SMBH(
+        p, freqs, t0=float((TC_ABS - Deltat) / YEAR), **wvf_pars)[(2, 2)]
     return SIGNAL_SCALE * np.concatenate([whiten_td(h['chan1'], WHITE_A),
                                           whiten_td(h['chan2'], WHITE_E)])
 
