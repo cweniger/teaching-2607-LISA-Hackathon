@@ -59,6 +59,21 @@ pre code { font-family: 'Menlo','Monaco',monospace; }
 .reveal section.title-slide .stack,
 .reveal section.section-slide .stack { max-width: 90%; }
 
+/* The flex centering above never reaches the slide you are looking at:
+   reveal's own `.reveal .slides>section.present { display:block }` is more
+   specific (three classes vs two) than `.reveal section.section-slide`, so
+   align-items/justify-content are inert. The divider then sat at the top of
+   the slide, and its 90%-wide .stack hugged the left edge -- 5% off centre.
+   Centre from the inner wrapper instead: reveal styles no .stack div, so
+   there is no specificity fight. */
+.reveal section.section-slide > .stack {
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .reveal section.title-slide h1 { font-size: 1.6em; margin: 0; }
 .reveal section.title-slide h3 {
   font-size: 0.9em; color: #34495e; margin: 0.4em 0 0;
