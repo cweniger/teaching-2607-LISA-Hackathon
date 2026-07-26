@@ -1,6 +1,8 @@
 # From MLPs to LISA — hands-on SBI tutorial
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb) &nbsp;**the tutorial**
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_sequential.ipynb) &nbsp;**the sequential zoom on the MBHB**, with waveforms simulated live
 
 **[Intro slides](https://cweniger.github.io/teaching-2607-LISA-Hackathon/)** —
 the 30-minute concept lecture given before the tutorial: the science case,
@@ -37,6 +39,7 @@ cell) or accepts a manual upload.
 | `tutorial_lisa_sbi.ipynb` | the tutorial (open this) |
 | `lisa_sims.ipynb` | companion: pip-install lisabeta, simulate LISA data live |
 | `lisa_sequential.ipynb` | companion: the sequential zoom on the MBHB, live sims |
+| `lisa_sequential_new.ipynb` | the same loop, bare bones: latent-space flows, prior in the proposal mixture, importance-weighted readout, no Procrustes/PSIS/EMA |
 | `*_src.py` | notebook sources (jupytext percent format) |
 | `build_notebook.py` | `*_src.py` → `.ipynb` converter |
 | `make_tutorial_simbank.py` | regenerates `mbhb_simbank.npz` |
