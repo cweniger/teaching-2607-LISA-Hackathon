@@ -895,15 +895,11 @@ study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
 #   \varepsilon \sim \mathcal N(0, 1).$$
 #
 # We want $\theta = (v, \alpha)$ out of that single number, so the problem is
-# degenerate by construction — and the degeneracy is not one we invented, it is
+# degenerate by construction — it is
 # whatever the curve $v^2 \sin(2\alpha) = \text{const}$ happens to look like: a
-# **curved ridge**, folded back on itself at $45°$, because a lob at $60°$ and a
-# line drive at $30°$ land in exactly the same place. The two throws below are
+# **curved ridge**, folded back on itself at $45°$, because a throw at $60°$ and a
+# throw at $30°$ land in exactly the same place. The two throws below are
 # indistinguishable from the landing point alone.
-#
-# This is GW parameter estimation in miniature. The distance–inclination
-# degeneracy of a real black-hole binary is the same statement: a face-on binary
-# far away looks like an edge-on binary nearby.
 
 # %%
 
@@ -973,8 +969,7 @@ fig.tight_layout()
 #
 # `VelocityNet`, `fm_loss`, `train_fm` and `fm_sample` are the Part 2
 # functions, untouched. The only difference is that `cond` is now the output of
-# a simulator. We z-score both sides first, which is standard practice: the
-# flow works best when everything it sees is $O(1)$.
+# a simulator. 
 #
 # We do it twice: once with a **single** throw, and once with the mean of
 # **twenty** throws (which shrinks the noise on the measurement to
@@ -1020,22 +1015,17 @@ fig.tight_layout()
 
 # %% [markdown]
 
-# **What the posterior looks like.** Not a blob. A curved ridge lying along the
+# **What the posterior looks like.** A curved ridge lying along the
 # dashed line — every $(v, \alpha)$ that lands the ball where we saw it — folded
 # back on itself about $45°$, where the two arms meet at the slowest speed that
 # can reach this far, $v = \sqrt{g\,x}$. Read it along a vertical line and it is
 # **bimodal**: any speed above that minimum has two viable angles, one lob and
-# one line drive. The network found all of this from a regression loss, having
-# never been shown the range formula — the dashed curve is drawn from the
+# one line drive.  The dashed curve is drawn from the
 # formula only so that we can see it got the shape right.
 #
 # **What more data does, and does not do.** Twenty throws instead of one
 # shrinks the measurement noise by $\sqrt{20}$ and the arms become correspondingly
-# thinner. But they do not merge, and the second mode does not go away: no
-# amount of measuring *where* the ball lands can tell a $30°$ throw from a
-# $60°$ one. That is a **structural** degeneracy, and the only cures are a
-# different measurement (time of flight, apex height) or extra prior
-# information. Statistical error shrinks with data; degeneracy does not.
+# thinner. But they do not merge, and the second mode does not go away.
 #
 # **Exercise 3.**
 # 1. **Amortization.** The trained network covers *every* $x$, not just ours.
