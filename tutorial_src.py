@@ -540,20 +540,14 @@ for name, (r, sg) in res.items():
 
 # %% [markdown]
 
-# ## A family of target distributions
+# ## Example: a spiral we can rotate and rescale
 
 # %% [markdown]
 
-# We need something a Gaussian cannot fake, and a *family* of them indexed by
-# $c$. Take a spiral — multi-modal along a curve — and let the condition rotate
-# it by $\varphi$ and scale it by $s$:
+# Our example: a spiral, with the condition $c = (\varphi, s)$ rotating it by
+# $\varphi$ and scaling it by $s$,
 #
-# $$c = (\varphi, s), \qquad \varphi \sim U(0, 2\pi), \qquad s \sim U(0.6, 1.4).$$
-#
-# The phase is fed to the network as $(\cos\varphi, \sin\varphi)$ rather than as
-# $\varphi$ itself, so that $\varphi = 0$ and $\varphi = 2\pi$ are the same input
-# — otherwise the network would have to learn that the two ends of its input
-# range mean the same thing, and would leave a visible seam.
+# $$\varphi \sim U(0, 2\pi), \qquad s \sim U(0.6, 1.4).$$
 
 # %%
 
@@ -568,6 +562,10 @@ def target_spiral(phase, scale):
 
 def encode(phase, scale):
     """Conditioning vector: (cos phase, sin phase, scale) -> (n, 3)."""
+    # the phase goes in as cos/sin rather than as the angle itself, so that
+    # phase 0 and phase 2*pi are literally the same input; feeding the raw angle
+    # would ask the network to learn that the ends of its input range coincide,
+    # and would leave a visible seam there
     return torch.cat([phase.cos(), phase.sin(), scale], 1)
 
 
@@ -587,19 +585,6 @@ for a, (ph, sc) in zip(ax, [(0.0, 1.0), (2.0, 1.0), (4.0, 1.0), (0.0, 1.4)]):
           aspect='equal', xlim=(-7, 7), ylim=(-7, 7))
 ax[0].set_ylabel(r'$\theta_2$')
 fig.suptitle('four members of the target family', y=1.02)
-fig.tight_layout()
-
-# %% [markdown]
-
-# The training set mixes *all* phases and scales together — 60000 points with no
-# labels beyond their own $(\varphi, s)$. Individually they look like noise:
-
-# %%
-
-fig, ax = plt.subplots(figsize=(4.2, 4.2))
-ax.plot(theta_tr[:8000, 0].cpu(), theta_tr[:8000, 1].cpu(), 'k.', ms=1, alpha=.25)
-ax.set(title='the training data, all conditions mixed', xlabel=r'$\theta_1$',
-       ylabel=r'$\theta_2$', aspect='equal')
 fig.tight_layout()
 
 # %% [markdown]
@@ -649,16 +634,14 @@ class VelocityNet(nn.Module):
 
 
 @torch.no_grad()                                    # sampling never needs gradients
-def fm_sample(net, cond, d_theta, steps=64, return_path=False):
+def fm_sample(net, cond, d_theta, steps=64):
     """Equation 2: Euler-integrate dtheta/dt = v from t=0 (noise) to t=1."""
     n = len(cond)                                   # one sample per conditioning row
     th = torch.randn(n, d_theta, device=cond.device)          # theta(0) ~ N(0, I)
-    path = [th.clone()]                             # keep the route, for plotting
     for i in range(steps):
         t = torch.full((n, 1), (i + 0.5) / steps, device=cond.device)  # midpoint
         th = th + net(th, t, cond) / steps          # Euler step: theta += v * dt
-        path.append(th.clone())
-    return (th, torch.stack(path)) if return_path else th     # theta(1) ~ q_phi
+    return th                                       # theta(1) ~ q_phi(. | cond)
 
 # %%
 
@@ -722,33 +705,6 @@ fig.tight_layout()
 # the rough size wrong and the structure blurred. Amortization interpolates; it
 # does not extrapolate, and beyond the training range you are trusting the
 # network rather than the data.
-#
-# Finally, look at how the samples were actually produced — 60 integrated
-# trajectories at one fixed condition:
-
-# %%
-
-p = torch.full((60, 1), 1.0, device=dev)
-s = torch.full((60, 1), 1.0, device=dev)
-_, path = fm_sample(snet, encode(p, s), 2, return_path=True)
-pp = path.cpu()
-
-fig, ax = plt.subplots(figsize=(4.6, 4.6))
-ax.plot(pp[:, :, 0], pp[:, :, 1], ':', color='gray', lw=.7)
-ax.plot(pp[0, :, 0], pp[0, :, 1], 'C2o', ms=4, label=r'base sample $\theta(0)$')
-ax.plot(pp[-1, :, 0], pp[-1, :, 1], 'C0o', ms=4, label=r'final sample $\theta(1)$')
-ax.set(title=r'60 trajectories at $\varphi=1$, $s=1$', xlabel=r'$\theta_1$',
-       ylabel=r'$\theta_2$', aspect='equal')
-ax.legend(fontsize=8)
-fig.tight_layout()
-
-# %% [markdown]
-
-# Every final sample traces back to one Gaussian base point. Note the routes are
-# **curved**, although training only ever used *straight* lines between random
-# pairs $(\theta_0, \theta_1)$: the network learns the *average* velocity over all
-# pairs passing through a point, and the resulting flow bends. Do not expect a
-# trajectory to connect the pair it was trained on.
 
 # %% [markdown]
 
