@@ -9,17 +9,18 @@ the 30-minute concept lecture given before the tutorial: the science case,
 Bayesian inference, neural networks, SBI, flow matching (with a live demo of
 the flow), and sequential SBI.
 
-A 90-minute hands-on tutorial for the LISA Hackathon (July 2026): from
-fitting a sine curve with a neural network to inferring the parameters of a
-massive black-hole binary in simulated LISA data — with the same ten-line
-flow-matching loss all the way through.
+A ~95-minute hands-on tutorial for the LISA Hackathon (July 2026): from
+fitting a sine curve with a neural network to running a sequential
+simulation-based-inference loop on a gravitational-wave signal — with the
+same ten-line flow-matching loss all the way through. The real massive
+black-hole binary lives in the companion notebook.
 
 | part | idea | new ingredient |
 |---|---|---|
-| 1 | fit a function with a neural network | MLPs, overfitting |
-| 2 | fit a *distribution*: SBI on a banana posterior | flow matching |
-| 3 | a toy gravitational wave | data compression + sequential inference |
-| 4 | a massive black-hole binary in LISA data (LDC1 Radler) | (pre-simulated) |
+| 1 | fit a *function* with a neural network | MLPs, overfitting, early stopping |
+| 2 | fit a *distribution* | flow matching, conditioning |
+| 3 | fit a *posterior*: feed the flow pairs from a simulator | SBI, amortization |
+| 4 | a toy gravitational wave | data compression + **sequential** inference |
 
 ## Run it
 
@@ -28,9 +29,10 @@ type), and run all cells. Dependencies: torch + numpy + matplotlib only (all
 pre-installed on Colab). Full execution takes ~3–5 minutes on a T4; the
 exercises are knob-turning experiments on top.
 
-Part 4 needs the pre-simulated training bank `mbhb_simbank.npz` (~9 MB):
-the notebook downloads it from Google Drive (file id set in the download
-cell) or accepts a manual upload.
+The tutorial needs no external data at all — every simulator in it is a few
+lines of torch. For the real LISA problem, continue with
+`lisa_sequential_new.ipynb`, which installs the lisabeta waveform stack from
+PyPI (~20 s on Colab) and simulates live.
 
 ## Files
 
@@ -38,19 +40,18 @@ cell) or accepts a manual upload.
 |---|---|
 | `tutorial_lisa_sbi.ipynb` | the tutorial (open this) |
 | `lisa_sims.ipynb` | companion: pip-install lisabeta, simulate LISA data live |
-| `lisa_sequential.ipynb` | companion: the sequential zoom on the MBHB, live sims |
-| `lisa_sequential_new.ipynb` | the same loop, bare bones: latent-space flows, prior in the proposal mixture, importance-weighted readout, no Procrustes/PSIS/EMA |
+| `lisa_sequential_new.ipynb` | **companion:** the sequential zoom on the MBHB, live sims — bare bones (latent-space flows, prior in the proposal mixture, importance-weighted readout, no Procrustes/PSIS/EMA) |
+| `lisa_sequential.ipynb` | *obsolete*, superseded by `lisa_sequential_new.ipynb` |
 | `*_src.py` | notebook sources (jupytext percent format) |
 | `build_notebook.py` | `*_src.py` → `.ipynb` converter |
-| `make_tutorial_simbank.py` | regenerates `mbhb_simbank.npz` |
+| `make_tutorial_simbank.py` | regenerates `mbhb_simbank.npz` (no longer used by the tutorial) |
 | `DESIGN_NOTES.md` | why the tutorial is built this way |
 | `docs/` | the intro slide deck, served by GitHub Pages (reveal.js) |
 
-The two companion notebooks need no pre-simulated data: they install the
-lisabeta waveform stack from PyPI wheels (~20 s on Colab) and simulate
-everything live — `lisa_sequential.ipynb` runs the actual dynamic-SBI loop
-(4 rungs, ~2000 live simulations per rung, ~3 min on CPU) on the
-9-parameter MBHB problem.
+The companion notebooks need no pre-simulated data: they install the lisabeta
+waveform stack from PyPI wheels (~20 s on Colab) and simulate everything live
+— `lisa_sequential_new.ipynb` runs the actual dynamic-SBI loop (4 rounds,
+~2000 live simulations per round) on the 9-parameter MBHB problem.
 
 `make_tutorial_simbank.py` requires the LISA waveform stack (lisabeta +
 lisa-data-challenge) and the analysis repository

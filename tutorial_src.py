@@ -13,7 +13,7 @@
 # | 4 | a toy gravitational wave | data compression + **sequential** inference |
 #
 # Each part fixes the visible failure of the one before. All code is plain
-# PyTorch, and the companion notebook `lisa_sequential.ipynb` runs the very
+# PyTorch, and the companion notebook `lisa_sequential_new.ipynb` runs the very
 # same functions on real LISA data.
 #
 # > **Colab setup:** Runtime → Change runtime type → **T4 GPU**, then run all
@@ -1581,13 +1581,14 @@ fig.tight_layout()
 # compression plus sequential zoom that make it work when the posterior is a
 # needle in the prior's haystack (Part 4).
 #
-# The companion notebook **`lisa_sequential.ipynb`** runs exactly this on real
-# LISA data: the LDC1-1 (Radler) massive black-hole binary, nine parameters,
-# with the waveforms simulated *live* by `lisabeta` inside the zoom loop. It
-# uses the same `fm_loss`, the same `VelocityNet`, the same `fm_sample` and
-# `fm_logprob` you have here — about three minutes end to end.
+# The companion notebook **`lisa_sequential_new.ipynb`** runs exactly this on
+# real LISA data: the LDC1-1 (Radler) massive black-hole binary, nine
+# parameters, with the waveforms simulated *live* by `lisabeta` inside the zoom
+# loop. It uses the same `fm_loss`, the same `VelocityNet`, the same
+# `fm_sample` and `fm_logprob` you have here, and it runs the loop for four
+# rounds — a minute or so per round on a Colab T4.
 #
-# [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_sequential.ipynb)
+# [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_sequential_new.ipynb)
 #
 # ---
 # ## Where to go from here
