@@ -1119,19 +1119,19 @@ fig.tight_layout()
 # ---
 # # Part 4 — A toy gravitational wave: compression + sequential zoom
 #
-# Now the data looks like *our* data: a long noisy time series containing a
+# Now let us look at a a long noisy time series containing a
 # chirp,
 # $$d(t) = A\sin\!\big(2\pi(f_0 t + \tfrac12 \dot f t^2) + \varphi\big)
 #          + n(t), \qquad n\sim\mathcal N(0,1),$$
-# with 1024 samples. We infer $(f_0, \dot f)$; the phase $\varphi$ is a
+# with 1024 samples. We infer here two parameters, $(f_0, \dot f)$; the phase $\varphi$ is a
 # **nuisance parameter** — we randomize it in training and never infer it
 # (exactly how the real LISA analysis treats its gauge angles).
 #
 # Two new problems appear:
-# 1. $x$ has 1024 dimensions — we need to **compress** before conditioning;
-# 2. with many cycles the likelihood is razor-sharp: an amortized net trained
-#    from the wide prior turns out too blurry. We fix that by **zooming in
-#    sequentially** (this is dynamic SBI).
+# 1. $x$ has 1024 dimensions — we need to **compress** before conditioning. We do that here classically with PCA.
+# 2. With many cycles the likelihood is razor-sharp: when trained witha small amount of simulations, an amortized net trained
+#    from the wide prior turns out too blurry. We fix that by **zooming in sequentially** (this is sequential SBI).  Sequential SBI
+#    leads to results that are not amortized but focused on the region of interest, reducing the number of required simulator calls.
 
 # %%
 
@@ -1170,7 +1170,7 @@ fig.tight_layout()
 # ## Step 1: compression with PCA
 #
 # We can't feed 1024 numbers into the conditioning — most of them are noise.
-# Simulate *clean* signals from the prior, and find the directions in which
+# To isolate the signal, we simulate *clean* signals from the prior, and find the directions in which
 # they actually vary (principal component analysis = an SVD). The singular
 # values tell us each component's signal-to-noise; we keep the top $K$.
 
@@ -1228,7 +1228,7 @@ th_mu, th_sd = theta_bank.mean(0), theta_bank.std(0)
 
 cnet = VelocityNet(2, K_PCA).to(dev)
 train_fm(cnet, zscore(theta_bank, th_mu, th_sd),
-         zscore(s_bank, s_mu, s_sd), steps=5000)
+         zscore(s_bank, s_mu, s_sd), steps=6000)
 
 s_obs = zscore(summarize(x_obs_chirp, mu0, V0), s_mu, s_sd)
 post0 = fm_sample(cnet, s_obs.expand(4000, K_PCA), 2) * th_sd + th_mu
@@ -1308,8 +1308,7 @@ print(f'training samples in the posterior neighbourhood: {inside.sum().item()} /
 #
 # To decide which proposed samples to keep we need importance weights, i.e.
 # the *density* of the flow — obtained by integrating the ODE backwards while
-# accumulating its divergence (this is the one "advanced" cell; it is exactly
-# what production codes like `falcon` do under the hood).
+# accumulating its divergence.
 
 # %%
 
@@ -1432,7 +1431,7 @@ fig.tight_layout()
 # through the buffer and once through the conditioning, and the readout behaves
 # like $L^{1+\gamma}\pi$ rather than $L\pi$. Correcting it means importance
 # reweighting the readout by $L^{-\gamma}$, which the ratio
-# $\log q_c - \log q_m$ already gives us. Production codes do exactly this;
+# $\log q_c - \log q_m$ already gives us. This here is a simple example, but complete implementioned would exactly do that;
 # we leave it out to keep the loop readable.
 #
 # **Exercise 4.**
@@ -1452,10 +1451,6 @@ fig.tight_layout()
 #    described above: draw from `qc`, evaluate `fm_logprob` under `qc` and
 #    `qm`, and resample with weights $\exp(-\gamma(\log q_c - \log q_m))$.
 #    Does the final width move toward the black contours?
-# 5. *(bonus, from Exercise 2b.4)* Define `fm_loss_late` with
-#    `t = torch.rand(...) ** (1/8)` for half the batch and pass it as
-#    `loss_fn=`. At LISA scale this one-line change moved our posteriors from
-#    "16 nats too wide" to "1 nat from mathematically optimal".
 
 # %% [markdown]
 
