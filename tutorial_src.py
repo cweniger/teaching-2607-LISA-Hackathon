@@ -1331,7 +1331,7 @@ def fm_logprob(net, w1, cond, steps=64):
 # %%
 
 def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
-                     loss_fn=fm_loss, verbose=True):
+                     loss_fn=fm_loss, verbose=True, return_nets=False):
     torch.manual_seed(1)
     buf_theta = draw_prior(4096)
     buf_x = chirp_sim(buf_theta)
@@ -1381,6 +1381,8 @@ def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
         if verbose:
             print(f'round {round_}: buffer f0 std {buf_theta[:, 0].std():.3f}, '
                   f'posterior f0 std {post[:, 0].std():.3f}')
+    if return_nets:                     # exercise 4.4 needs the trained flows
+        return posts, spectra, (qc, qm, so, tmu, tsd)
     return posts, spectra
 
 
@@ -1438,8 +1440,8 @@ fig.tight_layout()
 # 1. Run with `gamma=0.1` and `gamma=1.0`. Which converges faster? Which is
 #    riskier? (Think: what happens if an early, imperfect posterior estimate
 #    excludes the truth — can a later round recover?)
-# 2. Run with `refit_pca=False` (freeze the round-1 basis). How much slower is
-#    the zoom? Look at the right panel to see why.
+# 2. Run with `refit_pca=False` (freeze the round-1 basis). How does that change
+#    the zoom, and does it change it in the direction you expected?
 # 3. **Lower the SNR.** Set `AMP = 0.5` and re-run everything from the top of
 #    Part 4. With a weaker signal the likelihood grows competitive secondary
 #    maxima, and the zoom sometimes locks onto one and shrinks around it
@@ -1451,6 +1453,160 @@ fig.tight_layout()
 #    described above: draw from `qc`, evaluate `fm_logprob` under `qc` and
 #    `qm`, and resample with weights $\exp(-\gamma(\log q_c - \log q_m))$.
 #    Does the final width move toward the black contours?
+
+# %%
+
+# TODO — your code here.
+
+
+# %%
+
+# @title Reference solution to 4.1 and 4.2 { display-mode: "form" }
+# Three more runs at the same budget as the one above (which we reuse as the
+# baseline). Everything is compared on the width of the f0 posterior, since that
+# is what the zoom is supposed to shrink.
+GAMMA, N_R = 0.3, len(posts)
+
+runs = {f'baseline (gamma = {GAMMA})': posts}
+for name, kw in [('gamma = 0.1', dict(gamma=0.1)),
+                 ('gamma = 1.0', dict(gamma=1.0)),
+                 ('frozen PCA basis', dict(refit_pca=False))]:
+    runs[name], _ = sequential_chirp(n_rounds=N_R, verbose=False, **kw)
+
+# the exact posterior width in f0, from the grid we already computed (p, f0g)
+pw = np.asarray(p) / np.asarray(p).sum()
+f0n = f0g.cpu().numpy()[:, None]
+f0_exact = np.sqrt((pw * (f0n - (pw * f0n).sum()) ** 2).sum())
+
+print(f'\n{"run":26s} {"f0 width":>9s} {"vs exact":>9s} {"truth at":>12s}')
+for name, ps in runs.items():
+    w = ps[-1][:, 0].std().item()
+    off = (THETA_TRUE[0].item() - ps[-1][:, 0].mean().item()) / w
+    print(f'{name:26s} {w:9.4f} {w / f0_exact:8.2f}x {off:+8.1f} sigma')
+
+fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.4))
+for name, ps in runs.items():
+    ax[0].semilogy(range(1, N_R + 1), [q[:, 0].std().item() for q in ps], 'o-',
+                   ms=4, label=name)
+    ax[1].plot(ps[-1][:, 0], ps[-1][:, 1], '.', ms=1.5, alpha=.2, label=name)
+ax[0].axhline(f0_exact, color='k', ls='--', lw=1, label='exact posterior')
+ax[0].set(xlabel='round', ylabel=r'posterior width in $f_0$',
+          title='how fast each variant zooms')
+ax[0].legend(fontsize=8)
+ax[1].contour(f0g.cpu(), fdg.cpu(), p.T, levels=[0.011, 0.61], colors='k',
+              linewidths=1)
+ax[1].plot(*THETA_TRUE.cpu(), 'r*', ms=14)
+ax[1].set(xlabel=r'$f_0$', ylabel=r'$\dot f$', xlim=(F0_LO, F0_HI),
+          ylim=(FD_LO, FD_HI), title=f'round {N_R} against the exact posterior')
+ax[1].legend(markerscale=8, fontsize=8)
+fig.tight_layout()
+
+# %%
+
+# @title Reference solution to 4.3 { display-mode: "form" }
+# The failure to catch is "narrow and wrong", so the monitor has to ask whether
+# the parameters we settled on can still reproduce the data. Maximize the
+# likelihood over the phase (a matched filter) and look at the residual: it
+# should be consistent with pure noise, chi^2 per sample = 1.
+
+def max_logl(theta, n_phi=64):
+    """log L of each theta with the nuisance phase maximized out -> (n,)."""
+    ph = 2 * np.pi * (theta[:, :1] * tgrid + 0.5 * theta[:, 1:2] * tgrid ** 2)
+    phis = torch.linspace(0, 2 * np.pi, n_phi, device=dev)[:, None, None]
+    h = AMP * torch.sin(ph + phis)                    # (n_phi, n, N_T) templates
+    return (h @ x_obs_chirp[0] - 0.5 * (h ** 2).sum(-1)).max(0).values
+
+
+d2 = (x_obs_chirp[0] ** 2).sum()                      # chi^2 of doing nothing
+for name, th in [('final posterior', posts[-1][:200].to(dev)),
+                 ('random prior draws', draw_prior(200))]:
+    chi2 = (d2 - 2 * max_logl(th).max()) / N_T
+    print(f'best residual chi2 per sample, {name:19s} {chi2:.3f}')
+
+# %%
+
+# @title Reference solution to 4.4 { display-mode: "form" }
+# The correction is only worth making once the zoom has actually converged, so
+# run twice as long as above -- at 10 rounds the readout is still too WIDE and
+# widening it further would make things worse. Then: draw from q_c, weight by
+# L^(-gamma), resample.
+ps20, _, (qc, qm, so, tmu, tsd) = sequential_chirp(n_rounds=20, gamma=GAMMA,
+                                                   verbose=False, return_nets=True)
+n = 8000
+wp = fm_sample(qc, so.expand(n, K_PCA), 2)
+lqc = fm_logprob(qc, wp, so.expand(n, K_PCA))
+lqm = fm_logprob(qm, wp, torch.zeros(n, K_PCA, device=dev))
+
+logw = -GAMMA * (lqc - lqm)                           # log L^(-gamma), up to a const
+logw[~torch.isfinite(logw)] = -torch.inf
+wt = torch.softmax(logw, 0)
+ess = 1 / (wt ** 2).sum()                             # samples we effectively have
+post_rw = (wp[torch.multinomial(wt, 4000, replacement=True)] * tsd + tmu).cpu()
+
+print(f'importance weights: ESS {ess:.0f} / {n}')
+for lab, q in [('as trained', ps20[-1]), ('reweighted', post_rw)]:
+    w = q[:, 0].std().item()
+    print(f'  {lab:11s} f0 width {w:.4f} = {w / f0_exact:.2f}x exact,  '
+          f'truth at {(THETA_TRUE[0].item() - q[:, 0].mean().item()) / w:+.1f} sigma')
+
+fig, ax = plt.subplots(figsize=(5.6, 4.4))
+ax.plot(ps20[-1][:, 0], ps20[-1][:, 1], 'C0.', ms=2, alpha=.25,
+        label='readout as trained')
+ax.plot(post_rw[:, 0], post_rw[:, 1], 'C1.', ms=2, alpha=.25,
+        label=r'reweighted by $L^{-\gamma}$')
+ax.contour(f0g.cpu(), fdg.cpu(), p.T, levels=[0.011, 0.61], colors='k', linewidths=1)
+ax.plot(*THETA_TRUE.cpu(), 'r*', ms=14)
+ax.set(xlabel=r'$f_0$', ylabel=r'$\dot f$', xlim=(F0_LO, F0_HI),
+       ylim=(FD_LO, FD_HI), title='20 rounds: correcting the double-counting')
+ax.legend(markerscale=6, fontsize=8)
+fig.tight_layout()
+
+# %% [markdown]
+
+# **Answers.** (1) $\gamma$ buys speed at the price of safety, and the run above
+# shows both ends of that. $\gamma = 1$ zooms fastest — the buffer *is* the
+# posterior estimate, so every simulation goes where the answer seems to be —
+# and after ten rounds it is already *narrower* than the exact posterior. There
+# is no safety margin left: if an early round's estimate had excluded the truth,
+# the proposal would have no samples out there and no later round could pull it
+# back. $\gamma = 0.1$ shows the opposite failure. It barely zooms at all
+# (the width stalls near 1 rather than reaching 0.3), and because the flow never
+# gets training data at the scale of the likelihood, the readout ends up both
+# broad *and* mis-centred — in our run the truth sits about $2.5\sigma$ out. Slow
+# is not the same as safe.
+#
+# (2) Freezing the basis does **not** slow this problem down — it is three times
+# *further* along after ten rounds than the adaptive default (width 0.09 against
+# 0.31), and lands within a few percent of the exact width. Refitting redefines
+# the conditioning vector
+# every round, so the warm-started network has to relearn the map from summaries
+# to parameters while it is also chasing a moving buffer, and 500 steps per round
+# is not enough to do both. The adaptive basis is still the better summary in
+# information terms (that is what the steepening spectrum shows), but its
+# advantage only pays off when the per-round training budget is large enough to
+# absorb the change — or, as production codes do, when the basis is aligned
+# across rounds instead of refitted from scratch. Worth knowing that a good idea
+# can cost more than it returns at a small budget.
+#
+# (3) Ask whether the parameters you settled on can still reproduce the data.
+# Maximizing the likelihood over the nuisance phase and looking at the residual
+# gives $\chi^2$ per sample $\approx 1.04$ at the final posterior against
+# $1.2$–$1.4$ at random prior draws: the fit is consistent with pure noise, so
+# the zoom landed on a real solution. A posterior that had locked onto a
+# secondary maximum would keep shrinking while this number stayed high — narrow
+# *and* wrong, caught without knowing the answer. The other standard monitors are
+# the effective sample size of the importance weights (printed above; a collapse
+# means the proposal has stopped covering the target) and simply re-running with
+# a different seed to see whether the answers agree.
+#
+# (4) At the ten rounds used above the readout is still three times *wider* than
+# the exact posterior, so reweighting it — which can only widen — makes it worse.
+# Run twenty rounds instead and the picture reverses: the readout comes out at
+# $0.62\times$ the exact width, genuinely over-confident, and the $L^{-\gamma}$
+# correction moves it to $0.74\times$ while pulling the truth from $2.5\sigma$ to
+# $2.1\sigma$ away. The correction is real but it is not the whole story here,
+# and it is worth being clear about which error dominates before applying a fix
+# for the other one.
 
 # %% [markdown]
 
