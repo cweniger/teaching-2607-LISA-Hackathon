@@ -19,9 +19,8 @@
 # > **Colab setup:** Runtime → Change runtime type → **T4 GPU**, then run all
 # > cells top to bottom. Everything also works on CPU, just slower.
 #
-# > **Collapsing sections:** headings sit in their own cells, so clicking the
-# > triangle next to one folds it away. Anything titled ***Aside*** is safe to
-# > skip on a first read — collapse them all and you have the core path.
+# > **Reading path:** anything titled ***Aside*** is background you can skip on a
+# > first read; collapse those sections and what remains is the core path.
 #
 # > **New to PyTorch?** There is a short **FAQ at the end of this notebook**
 # > answering the things that trip people up on a first read (`.detach()`,
@@ -162,15 +161,28 @@ fig.tight_layout()
 #
 # **We monitor something better than the MSE.** An MSE says how large the errors
 # are, not whether the network's *confidence* is justified. So give the model a
-# noise level $\sigma$ — $y_i \sim \mathcal N(\mathrm{MLP}_\phi(x_i), \sigma^2)$ —
-# and track its negative log-likelihood,
+# noise level $\sigma$: assume each target is drawn as
+# $y_i \sim \mathcal N(\mathrm{MLP}_\phi(x_i), \sigma^2)$. The model now assigns
+# a **probability density** to any observed $y_i$, and we can ask how probable
+# the data it was shown actually is.
 #
-# $$\mathcal L = \frac{\mathrm{MSE}}{2\sigma^2} \;+\; \log\sigma ,
-#   \qquad \hat\sigma^2 = \mathrm{MSE}_{\rm train},$$
+# That number is the **likelihood**. Densities of many points multiply, which
+# underflows, so one always works with the logarithm; and optimizers minimize
+# rather than maximize, so one flips the sign. The result — the quantity we will
+# plot on every loss axis from here on — is the **negative log-likelihood**, or
+# **NLL**: minus the log of the probability the model assigns to the data.
+# *Lower is better, and unlike an MSE it can be negative.* For a Gaussian it
+# works out to
 #
-# a probability density rather than a score. The best $\sigma$ for a given
-# network is just its root-mean-square training residual, so we plug that in
-# each epoch instead of fitting it.
+# $$\underbrace{\mathcal L}_{\rm NLL} = \frac{\mathrm{MSE}}{2\sigma^2}
+#   \;+\; \log\sigma \;+\; \underbrace{\tfrac12\log 2\pi}_{\rm constant,\ dropped},
+#   \qquad \hat\sigma^2 = \mathrm{MSE}_{\rm train}.$$
+#
+# Read the two terms: the first is the familiar squared error, now measured in
+# units of the claimed uncertainty, and the second is what stops the model
+# claiming $\sigma \to 0$. The best $\sigma$ for a given network is simply its
+# root-mean-square training residual, so we plug that in each epoch rather than
+# fitting it.
 #
 # ```text
 # ALGORITHM  fit(net, train, validation, eta, patience)
@@ -198,8 +210,14 @@ fig.tight_layout()
 # no longer have to tune — pass something large and let `patience` decide.
 
 # %%
-def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000):
-    """Train on MSE; monitor the Gaussian NLL with a plug-in sigma; stop early."""
+def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000,
+        rewind=True):
+    """Train on MSE; monitor the Gaussian negative log-likelihood; stop early.
+
+    The NLL is minus the log probability the model assigns to the data, using
+    sigma^2 = mean squared TRAINING residual. Lower is better; it can go
+    negative. Early stopping keeps the parameters from the best validation epoch.
+    """
     opt = torch.optim.Adam(net.parameters(), lr=lr)   # holds pointers to phi
     hist, best, best_ep, snap = [], np.inf, 0, None
 
@@ -222,9 +240,14 @@ def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000):
         if ep - best_ep > patience:                    # stalled: stop
             break
 
-    net.load_state_dict(snap)                          # rewind to the best epoch
-    print(f'stopped at epoch {ep + 1}; best validation NLL {best:.2f} '
-          f'at epoch {best_ep + 1}')
+    if rewind:
+        net.load_state_dict(snap)                      # rewind to the best epoch
+        print(f'stopped at epoch {ep + 1}; kept epoch {best_ep + 1} '
+              f'(validation NLL {best:.2f})')
+    else:                                              # keep the final weights
+        best_ep = ep
+        print(f'stopped at epoch {ep + 1}; kept the LAST epoch '
+              f'(validation NLL {hist[-1][1]:.2f})')
     return np.array(hist), best_ep
 
 # %% [markdown]
@@ -241,14 +264,36 @@ def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000):
 # down, and the overfitting signal arrives late.
 
 # %% [markdown]
-# ### Aside — what Adam adds
+# ### Aside — how `loss.backward()` gets the gradient
 
 # %% [markdown]
-# We use **Adam** rather than the bare update above. It keeps a running average
-# of each parameter's gradient and of its square, and scales that parameter's
-# step by them, so parameters with persistently small gradients still move. The
-# loop structure is unchanged; only the step size becomes per-parameter and
-# adaptive.
+# The loop needs $\partial \mathcal L / \partial \phi$ for all ~130 000
+# parameters. Finite differences would cost one forward pass each; **reverse-mode
+# automatic differentiation** — *backpropagation* — gets all of them for about
+# the cost of one.
+#
+# The trick is the chain rule applied right to left. Our network is a chain
+# $x \to h^{(1)} \to h^{(2)} \to h^{(3)} \to \hat y \to \mathcal L$, so
+#
+# $$\frac{\partial \mathcal L}{\partial W^{(1)}} =
+#   \frac{\partial \mathcal L}{\partial \hat y}\,
+#   \frac{\partial \hat y}{\partial h^{(3)}}\,
+#   \frac{\partial h^{(3)}}{\partial h^{(2)}}\,
+#   \frac{\partial h^{(2)}}{\partial h^{(1)}}\,
+#   \frac{\partial h^{(1)}}{\partial W^{(1)}} .$$
+#
+# Multiply those factors *left to right* and you propagate a single vector
+# backwards through the layers, reusing it for every parameter you pass. Going
+# the other way would mean carrying a full matrix per layer, which is what makes
+# forward-mode differentiation expensive when there are many parameters and one
+# output.
+#
+# PyTorch does the book-keeping for you. Every operation on a tensor that
+# `requires_grad` is recorded in a graph as it executes, `loss.backward()` walks
+# that graph backwards accumulating into each `p.grad`, and the graph is then
+# freed. Two consequences you meet in the code: gradients *accumulate*, hence
+# `opt.zero_grad()` each step, and anything you do not want recorded belongs
+# inside `torch.no_grad()`.
 
 # %% [markdown]
 # ## Example: measuring a frequency
@@ -334,7 +379,9 @@ for lo in range(1, 5):
           f'   (model claims {sigma_hat:.3f})')
 
 # %% [markdown]
-# **Overfitting, unmistakably.** The training NLL falls without limit, because
+# **Overfitting, unmistakably.** Remember that the NLL is minus the log
+# probability the model assigns to the data, so down is better and negative is
+# fine. The training NLL falls without limit, because
 # $\hat\sigma$ tracks training residuals and those keep shrinking as the network
 # memorizes its 300 examples. The validation NLL bottoms out and then leaves the
 # top of the panel: a network claiming precision it achieves only on data it has
@@ -356,8 +403,10 @@ for lo in range(1, 5):
 # %% [markdown]
 # `experiment` below re-runs everything with whatever you change. Try:
 #
-# 1. **`patience`** — 20, then 3000. How much accuracy does stopping too early
-#    cost, and how bad does the over-confidence get if you stop too late?
+# 1. **`rewind=False`** — keep the *last* epoch instead of the best one, i.e.
+#    switch early stopping off. What happens to $\hat\sigma$ compared with the
+#    real error? (And note what `patience` alone does: since we always rewind to
+#    the best epoch, raising it only burns compute.)
 # 2. **`width`** — 8, then 1024. Does the widest network do worst?
 # 3. **`n_train`** — 100, then 2000. Which improves, the RMSE or the honesty of
 #    $\hat\sigma$?
@@ -370,14 +419,14 @@ for lo in range(1, 5):
 
 # %%
 def experiment(n_train=300, width=256, patience=300, sigma=0.3,
-               nu_hi=NU_HI, random_phase=False):
+               nu_hi=NU_HI, random_phase=False, rewind=True):
     """Re-run the frequency fit with different settings; returns (RMSE, sigma_hat)."""
     global NU_HI, SPAN
     NU_HI, SPAN = nu_hi, nu_hi - NU_LO             # let the band be changed
     dt, nt = sine_data(n_train, sigma, seed=0, random_phase=random_phase)
     dv, nv = sine_data(2000, sigma, seed=1, random_phase=random_phase)
     net = MLP(N_GRID, 1, width)
-    h, bep = fit(net, dt, nt, dv, nv, patience=patience)
+    h, bep = fit(net, dt, nt, dv, nv, patience=patience, rewind=rewind)
     with torch.no_grad():
         r = (SPAN * (net(dv) - nv)).squeeze()
     rmse, sig = r.pow(2).mean().sqrt().item(), h[bep, 2] * SPAN
@@ -387,7 +436,54 @@ def experiment(n_train=300, width=256, patience=300, sigma=0.3,
     return rmse, sig
 
 
-experiment()                                        # <-- change one thing at a time
+# %%
+# TODO — your code here. Call experiment() a few times, changing one argument at
+# a time, and note the RMSE and the claimed sigma each run reports.
+experiment()
+
+
+# %%
+# @title Reference solution { display-mode: "form" }
+runs = {
+    'baseline':          dict(),
+    'no early stopping': dict(rewind=False),
+    'width = 8':         dict(width=8),
+    'width = 1024':      dict(width=1024),
+    'n_train = 100':     dict(n_train=100),
+    'n_train = 2000':    dict(n_train=2000),
+    'nu up to 12':       dict(nu_hi=12.0),
+    'random phase':      dict(random_phase=True),
+}
+res = {}
+for name, kw in runs.items():
+    print(f'{name}:')
+    res[name] = experiment(**kw)
+
+print(f'\n{"setting":18s} {"RMSE":>7s} {"claims":>8s} {"ratio":>7s}')
+for name, (r, sg) in res.items():
+    print(f'{name:18s} {r:7.3f} {sg:8.3f} {r / sg:7.2f}')
+
+# %% [markdown]
+# **What you should see.** Switching early stopping off is the instructive one,
+# and not in the way you might expect: the RMSE actually *improves* slightly
+# (0.25 → 0.21 cycles), because more training does sharpen the point estimate.
+# What breaks is the error bar — $\hat\sigma$ falls to 0.05 cycles, so the model
+# is wrong about its own precision by a factor of four. A model can get *more*
+# accurate and much *less* honest at the same time, and only held-out data tells
+# you which is happening. `patience` on its own does nothing to the result: we
+# always rewind to the best epoch, so raising it only spends more epochs finding
+# the same network.
+#
+# `width=8` underfits, with too few kinks to represent the map from 30 samples to
+# a frequency; `width=1024` is *no worse* than the default, because early
+# stopping is doing the regularizing rather than the architecture. More data
+# improves accuracy a lot (the RMSE roughly halves from 300 to 2000 examples) but
+# **not** calibration — the ratio stays near 1.4 throughout, because what is
+# wrong is not the amount of data but the *shape* of the model: one global
+# $\sigma$ cannot describe an error that depends on $\nu$. Pushing the band to
+# 12 cycles makes that worse still, and randomising the phase costs real accuracy,
+# since the network must discover an invariance to a parameter it is never asked
+# about.
 
 # %% [markdown]
 # ---
