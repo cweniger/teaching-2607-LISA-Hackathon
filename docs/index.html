@@ -17,23 +17,11 @@
 
     <section class="title-slide">
       <div class="stack">
-        <h1 style="text-align:left; font-size:2.5em">Learning from Simulations</h1>
-        <h3 style="text-align:left; font-size:1.9em;">Simulation-based inference for gravitational-wave data analysis</h3>
+        <h1 style="text-align:left; font-size:2.5em">Active Learning from Simulations</h1>
+        <h3 style="text-align:left; font-size:1.9em;">Sequential simulation-based inference for GW analysis</h3>
         <p class="title-meta">
           Christoph Weniger &mdash; University of Amsterdam (GRAPPA)<br>
           LISA Hackathon &mdash; 27 July 2026<br><span style="color:#2980b9;">Concept lecture (30 min) before the hands-on tutorial</span>
-        </p>
-        <p style="text-align:left; font-size:0.62em; color:#7f8c8d; line-height:1.5; margin-top:18px;">
-          <strong style="color:#2c3e50;">With:</strong>
-          James Alvey (University of Cambridge, Kavli Institute for Cosmology) &middot;
-          Noemi Anau Montel (Max Planck Institute for Astrophysics, Garching) &middot;
-          Uddipta Bhardwaj (ETH Zurich, Institute for Particle Physics and Astrophysics) &middot;
-          Philippa S. Cole (Queen Mary University of London) &middot;
-          Huifang Lyu (University of Amsterdam) &middot;
-          Benjamin Kurt Miller (Meta) &middot;
-          Joy Sanghavi (University of Amsterdam) &middot;
-          Oleg Savchenko (University of Amsterdam, GRAPPA) &middot;
-          Lorenzo Speri (European Space Agency)
         </p>
       </div>
     </section>
@@ -47,7 +35,6 @@
       <div class="stack">
         <div class="grad-bar"></div>
         <h1>Introduction &amp; Motivation</h1>
-        <p>Better instruments improve precision &mdash; and complicate inference.</p>
         <div class="grad-bar below"></div>
       </div>
     </section>
@@ -153,7 +140,7 @@
       <div class="stack">
         <div class="grad-bar"></div>
         <h1>Simulation-based inference</h1>
-        <p>Using interpretative and generative AI to perform complex scientific analyses</p>
+        <p>Using interpretative and generative AI to perform statistical analyses</p>
         <div class="grad-bar below"></div>
       </div>
     </section>
@@ -1418,9 +1405,6 @@
         </div>
 
       </div>
-      <p class="fragment" style="text-align:center; margin-top:8px; font-size:0.82em; color:#2c3e50;">
-        Both maps are trained end to end by a single gradient \(\nabla_\phi \mathcal{L}\): no hand-picked summary, no \(\varepsilon\), no accept / reject.
-      </p>
     </section>
 
     <script>
@@ -1467,29 +1451,6 @@
     <!-- Simulation-based inference: SBI Bayesian/freq (PDF p19) -->
     
 
-<section>
-      <p class="eyebrow">Foundations of SBI &gt; The general recipe</p>
-      <h2>Simulation-based inference</h2>
-      <p class="subtitle" style="margin-top:0;">Solving Bayesian (&amp; Frequentist) inference problems based on simulation output</p>
-      <div style="text-align:center; margin:10px 0 8px;">
-        \[ q_\phi(\mathbf{z}\mid\mathbf{x}) \;\simeq\; \frac{p(\mathbf{x}\mid\mathbf{z})\,p(\mathbf{z})}{p(\mathbf{x})} \]
-      </div>
-      <div style="display:flex; gap:14px; align-items:flex-start; margin-top:6px;">
-        <div style="flex:1; text-align:center;">
-          <img src="img/p19_software.png" style="width:100%; max-height:310px; object-fit:contain;">
-        </div>
-        <div style="flex:1; display:flex; flex-direction:column; align-items:center;">
-          <p style="font-size:0.85em; margin:0 0 6px;">Hundreds of method &amp; application papers</p>
-          <img src="img/p19_methods.png" style="width:100%; max-height:280px; object-fit:contain;">
-        </div>
-      </div>
-      <p style="font-size:0.65em; color:#7f8c8d; text-align:left; margin:4px 0 0;">
-        github.com/smsharma/awesome-neural-sbi
-        <span style="color:#95a0a8;">&middot; see also Cranmer, Brehmer &amp; Louppe 2020, arXiv:1911.01429</span>
-      </p>
-    </section>
-
-    <!-- SBI: lower simulation costs (PDF p23) -->
     
 
     <!-- ============================================================ -->
@@ -1504,10 +1465,10 @@
 
       <div style="font-size:0.86em; line-height:1.5; margin-top:14px;">
         <p style="margin:0 0 10px;">
-          In Part&nbsp;1 an MLP fitted a <em>function</em>: one number \(y\) for each input \(x\).
-          We now want it to fit a <em>distribution</em>,
-          \( q_\phi(\theta) \approx p(\theta) \), given only <strong>samples</strong> of \(p\).
-          That is a far more constrained object.
+          We need to approximate <em>probability distributions</em>,
+          \( q_\phi(\theta \mid x) \approx p(\theta \mid x) \), given only
+          <strong>samples</strong> from a simulator &mdash; far more constrained objects
+          than the functions of Part&nbsp;1.
         </p>
 
         <div style="display:flex; gap:20px; margin-top:14px; align-items:stretch;">
@@ -1524,8 +1485,7 @@
               <p style="margin:0;">
                 <strong>Normalized</strong>, \(\int q_\phi(\theta)\,d\theta = 1\).<br>
                 <span style="color:#7f8c8d;">Hard. This is a <span class="highlight">global</span>
-                constraint: change the network anywhere and the integral changes everywhere.
-                So you cannot simply declare an MLP's output to be a density and train it.</span>
+                constraint: change the network anywhere and the integral changes everywhere.</span>
               </p>
             </div>
           </div>
@@ -1617,7 +1577,7 @@
         <div style="flex:1.15; font-size:0.76em; line-height:1.4;">
           <p style="margin:0 0 4px;">
             The motion is a <strong>velocity field</strong> \(v_\phi(\theta,t)\) &mdash;
-            an MLP exactly like Part&nbsp;1's, taking a position \(\theta\) and a time
+            a simple MLP, taking a position \(\theta\) and a time
             \(t\in[0,1]\). Write \(\theta_0\sim\mathcal N(0,I)\) for a noise point and
             \(\theta_1\sim p\) for a data point.
           </p>
@@ -1644,28 +1604,6 @@
           </div>
         </div>
 
-        <div style="flex:0.85;">
-          <div style="background:#2c3e50; border-radius:8px; padding:11px 13px; margin-top:2px;">
-            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.6em; color:#95a5a6;
-                        letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">Equation 1, verbatim</div>
-<pre style="margin:0; background:none; box-shadow:none;"><code style="font-size:0.52em; line-height:1.45; color:#ecf0f1; background:none;">def fm_loss(net, th1, cond=None):
-    th0 = torch.randn_like(th1)
-    t   = torch.rand(len(th1), 1)
-    tht = (1 - t) * th0 + t * th1
-    v   = net(tht, t, cond)
-    return ((v - (th1 - th0))**2).mean()</code></pre>
-          </div>
-          <p style="font-size:0.7em; color:#34495e; margin:9px 2px 0; line-height:1.4;">
-            Note what is <em>absent</em>: no integration, no samples from the model, no density,
-            no Jacobian. It is Part&nbsp;1's regression loss with a fancier target &mdash; and it is
-            the <strong>same six lines</strong> that will analyze a LISA signal in Part&nbsp;5.
-          </p>
-          <div class="box box-orange" style="margin-top:9px; padding:9px 13px; font-size:0.72em;">
-            <em>Why</em> regressing onto straight lines between <strong>unrelated</strong> random pairs
-            yields a field that transports \(\mathcal N(0,I)\) to \(p\) is genuinely non-obvious.
-            Take it as a black box with three knobs &mdash; the three equations are all of them.
-          </div>
-        </div>
       </div>
 
       <p style="font-size:0.6em; color:#7f8c8d; text-align:left; margin:6px 0 0;">
@@ -2021,27 +1959,6 @@
           </p>
         </div>
 
-        <div style="flex:0.95;">
-          <div style="background:#2c3e50; border-radius:8px; padding:11px 13px;">
-            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.6em; color:#95a5a6;
-                        letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">The whole change</div>
-<pre style="margin:0; background:none; box-shadow:none;"><code style="font-size:0.52em; line-height:1.5; color:#ecf0f1; background:none;">theta = prior.sample(N)          <span style="color:#7f8c8d;"># parameters</span>
-x     = simulator(theta)         <span style="color:#7f8c8d;"># data</span>
-
-net   = VelocityNet(d_theta,
-                    <span style="color:#f39c12;">d_cond=d_x</span>)  <span style="color:#7f8c8d;"># &lt;- only edit</span>
-train_fm(net, theta, <span style="color:#f39c12;">cond=x</span>)
-
-<span style="color:#7f8c8d;"># posterior for a new observation:</span>
-post = fm_sample(net, <span style="color:#f39c12;">x_obs</span>, d_theta)</code></pre>
-          </div>
-          <div class="box box-green" style="margin-top:11px; font-size:0.72em;">
-            <strong>Why this scales to LISA.</strong> \(x\) is high-dimensional, so in practice we
-            condition on a learned or linear <em>compression</em> of the data (Part&nbsp;4: PCA), and
-            we focus the prior where the signal lives (<em>sequential</em> SBI, next). The loss
-            never changes.
-          </div>
-        </div>
       </div>
     </section>
 
