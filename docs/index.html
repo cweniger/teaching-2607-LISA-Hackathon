@@ -1953,19 +1953,6 @@
         </div>
       </div>
 
-      <div style="display:flex; gap:18px; margin-top:16px; font-size:0.8em;">
-        <div class="box box-blue" style="flex:1; margin:0;">
-          <strong>Why not use this for real?</strong> The sum runs over every training point at
-          every evaluation, and it reproduces the <em>sample set</em> exactly &mdash; memorisation,
-          not generalisation. The MLP is what buys you a field you can evaluate in one forward
-          pass, and one that interpolates between the samples.
-        </div>
-        <div class="box box-green" style="flex:1; margin:0;">
-          <strong>But it is the right target.</strong> Training regresses \(v_\phi\) onto exactly
-          these arrows, so \(v^\star\) is what the loss is pulling the network towards. Watching
-          it is watching the answer, without waiting for the optimiser.
-        </div>
-      </div>
     </section>
     </section>
 
