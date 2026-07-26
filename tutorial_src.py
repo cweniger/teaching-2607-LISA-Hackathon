@@ -271,34 +271,34 @@ SPAN = NU_HI - NU_LO
 
 
 def sine_data(n, sigma=0.3, seed=0, random_phase=False):
-    """n examples: d (n, 30) noisy samples, and the rescaled frequency (n, 1)."""
+    """n examples: x (n, 30) noisy samples, and the rescaled frequency (n, 1)."""
     torch.manual_seed(seed)
     nu = NU_LO + SPAN * torch.rand(n, 1)                     # nu ~ U(1, 5)
     phi = torch.rand(n, 1) * 2 * np.pi if random_phase else torch.zeros(n, 1)
-    d = torch.sin(2 * np.pi * nu * tj + phi) + sigma * torch.randn(n, N_GRID)
-    return d, (nu - NU_LO) / SPAN
+    x = torch.sin(2 * np.pi * nu * tj + phi) + sigma * torch.randn(n, N_GRID)
+    return x, (nu - NU_LO) / SPAN
 
 
-d_tr, nu_tr = sine_data(300, seed=0)                # training set
-d_va, nu_va = sine_data(2000, seed=1)               # held-out set
+x_tr, nu_tr = sine_data(300, seed=0)                # training set
+x_va, nu_va = sine_data(2000, seed=1)               # held-out set
 
 fig, ax = plt.subplots(1, 3, figsize=(13, 2.7), sharey=True)
 for a, i in zip(ax, range(3)):
     nu_i = NU_LO + SPAN * nu_tr[i, 0]
     a.plot(tj, torch.sin(2 * np.pi * nu_i * tj), 'k--', lw=1, label='hidden signal')
-    a.plot(tj, d_tr[i], 'C0o-', ms=4, lw=.8, label='what the network sees')
+    a.plot(tj, x_tr[i], 'C0o-', ms=4, lw=.8, label='what the network sees')
     a.set(xlabel='t', title=fr'$\nu$ = {nu_i:.2f} cycles')
-ax[0].set_ylabel('d'); ax[0].legend(fontsize=8)
+ax[0].set_ylabel('x'); ax[0].legend(fontsize=8)
 fig.tight_layout()
 
 # %%
 
 freq_net = MLP(N_GRID, 1, 256)                      # 30 numbers in, 1 out
-hist, best_ep = fit(freq_net, d_tr, nu_tr, d_va, nu_va)
+hist, best_ep = fit(freq_net, x_tr, nu_tr, x_va, nu_va)
 
 sigma_hat = hist[best_ep, 2] * SPAN                 # plug-in sigma, in cycles
 with torch.no_grad():
-    nu_est = (NU_LO + SPAN * freq_net(d_va)).squeeze()
+    nu_est = (NU_LO + SPAN * freq_net(x_va)).squeeze()
 nu_true = (NU_LO + SPAN * nu_va).squeeze()
 resid = nu_est - nu_true
 
@@ -378,12 +378,12 @@ def experiment(n_train=300, width=256, patience=300, sigma=0.3,
     """Re-run the frequency fit with different settings; returns (RMSE, sigma_hat)."""
     global NU_HI, SPAN
     NU_HI, SPAN = nu_hi, nu_hi - NU_LO             # let the band be changed
-    dt, nt = sine_data(n_train, sigma, seed=0, random_phase=random_phase)
-    dv, nv = sine_data(2000, sigma, seed=1, random_phase=random_phase)
+    xt, nt = sine_data(n_train, sigma, seed=0, random_phase=random_phase)
+    xv, nv = sine_data(2000, sigma, seed=1, random_phase=random_phase)
     net = MLP(N_GRID, 1, width)
-    h, bep = fit(net, dt, nt, dv, nv, patience=patience, rewind=rewind)
+    h, bep = fit(net, xt, nt, xv, nv, patience=patience, rewind=rewind)
     with torch.no_grad():
-        r = (SPAN * (net(dv) - nv)).squeeze()
+        r = (SPAN * (net(xv) - nv)).squeeze()
     rmse, sig = r.pow(2).mean().sqrt().item(), h[bep, 2] * SPAN
     print(f'  RMSE {rmse:.3f} cycles,  model claims {sig:.3f}  '
           f'-> off by x{rmse / sig:.2f}')
