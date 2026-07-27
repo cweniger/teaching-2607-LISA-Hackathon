@@ -945,7 +945,7 @@ def plot_ridge(ax, x_obs, label=None):
     """Draw that curve on a (v, alpha) plane, and set up the axes."""
     v = torch.linspace(THETA_LO[0], THETA_HI[0], 200, device=dev)
     for i, a in enumerate(ridge(x_obs, v)):
-        ax.plot(v.cpu(), np.degrees(a.cpu()), 'k--', lw=1,
+        ax.plot(v.cpu(), a.rad2deg().cpu(), 'k--', lw=1,
                 label=label if i == 0 else None)
     ax.set(xlabel='v [m/s]', ylabel=r'$\alpha$ [deg]',
            xlim=(8, 12), ylim=(np.degrees(0.15), 90 - np.degrees(0.15)))
@@ -958,7 +958,8 @@ paths = ball_path(torch.cat([THETA_TRUE, TWIN])).cpu()
 fig, ax = plt.subplots(figsize=(6.5, 3.0))
 for p, th, c in zip(paths, torch.cat([THETA_TRUE, TWIN]).cpu(), ['C0', 'C3']):
     ax.plot(p[:, 0], p[:, 1], c, lw=1.5,
-            label=fr'$v$ = {th[0]:.1f} m/s, $\alpha$ = {np.degrees(th[1]):.0f}$^\circ$')
+            label=fr'$v$ = {th[0]:.1f} m/s, '
+                  fr'$\alpha$ = {th[1].rad2deg():.0f}$^\circ$')
 ax.axvline(paths[0, -1, 0].item(), color='k', ls=':', lw=1)
 ax.set(xlabel='distance [m]', ylabel='height [m]', ylim=(0, None))
 ax.legend(fontsize=8, title='same landing point', title_fontsize=8)
@@ -1008,8 +1009,8 @@ post_20, x_obs_20 = run_ball_sbi(n_throws=20)
 fig, ax = plt.subplots(1, 2, figsize=(11, 4.6), sharey=True)
 for a, post, xo, nt in [(ax[0], post_1, x_obs_1, 1), (ax[1], post_20, x_obs_20, 20)]:
     plot_ridge(a, xo)
-    a.plot(post[:, 0], np.degrees(post[:, 1]), 'C0.', ms=1.5, alpha=.25)
-    a.plot(THETA_TRUE[0, 0].cpu(), np.degrees(THETA_TRUE[0, 1].cpu()), 'r*', ms=15)
+    a.plot(post[:, 0], post[:, 1].rad2deg(), 'C0.', ms=1.5, alpha=.25)
+    a.plot(THETA_TRUE[0, 0].cpu(), THETA_TRUE[0, 1].rad2deg().cpu(), 'r*', ms=15)
     a.set_title(f'{nt} throw{"s" if nt > 1 else ""}:  x = {xo:.2f} m')
 ax[1].set_ylabel('')
 fig.tight_layout()
@@ -1060,7 +1061,7 @@ for a, xo in zip(ax, [6.0, 9.5, 11.5]):
     post = (fm_sample(net_b, zscore(xt, xmu_b, xsd_b).expand(6000, 1), 2)
             * tsd_b + tmu_b).cpu()
     plot_ridge(a, xo)
-    a.plot(post[:, 0], np.degrees(post[:, 1]), 'C0.', ms=1.5, alpha=.25)
+    a.plot(post[:, 0], post[:, 1].rad2deg(), 'C0.', ms=1.5, alpha=.25)
     a.set_title(f'x = {xo} m')
 for a in ax[1:]:
     a.set_ylabel('')
@@ -1091,11 +1092,11 @@ plot_ridge(ax, x_obs2[0, 0].item(), label='range alone')
 # the other observable has its own degeneracy: T = 2 v sin(alpha) / g = const
 vv = torch.linspace(THETA_LO[0], THETA_HI[0], 200, device=dev)
 sa = G * x_obs2[0, 1] / (2 * vv)                          # = sin(alpha)
-ax.plot(vv.cpu(), np.degrees(torch.asin(sa.masked_fill(sa > 1, float('nan'))).cpu()),
+ax.plot(vv.cpu(), torch.asin(sa.masked_fill(sa > 1, float('nan'))).rad2deg().cpu(),
         'k:', lw=1.4, label='time of flight alone')
-ax.plot(post2[:, 0], np.degrees(post2[:, 1]), 'C2.', ms=1.5, alpha=.25,
+ax.plot(post2[:, 0], post2[:, 1].rad2deg(), 'C2.', ms=1.5, alpha=.25,
         label='posterior from both')
-ax.plot(THETA_TRUE[0, 0].cpu(), np.degrees(THETA_TRUE[0, 1].cpu()), 'r*', ms=15)
+ax.plot(THETA_TRUE[0, 0].cpu(), THETA_TRUE[0, 1].rad2deg().cpu(), 'r*', ms=15)
 ax.legend(fontsize=8, markerscale=6, loc='upper right')
 ax.set_title('two observables: the posterior sits where the curves cross')
 fig.tight_layout()
@@ -1263,7 +1264,7 @@ lp = chirp_true_logpost(f0g, fdg, x_obs_chirp).cpu()
 fig, ax = plt.subplots(figsize=(5.5, 4.4))
 ax.plot(post0.cpu()[:, 0], post0.cpu()[:, 1], 'C0.', ms=2, alpha=.3,
         label='amortized posterior')
-p = np.exp(lp - lp.max())
+p = (lp - lp.max()).exp()
 # the exact posterior is far too small to see at this scale -- box it instead
 ax.add_patch(plt.Rectangle((F0_LO, FD_LO), F0_HI - F0_LO, FD_HI - FD_LO,
                            fill=False, ec='k', lw=1.5,
