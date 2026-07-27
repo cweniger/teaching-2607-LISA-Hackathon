@@ -1331,8 +1331,7 @@ def fm_logprob(net, w1, cond, steps=64):
 # %%
 
 def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
-                     loss_fn=fm_loss, verbose=True, return_nets=False,
-                     x_obs=x_obs_chirp):
+                     loss_fn=fm_loss, verbose=True, x_obs=x_obs_chirp):
     torch.manual_seed(1)
     buf_theta = draw_prior(4096)
     buf_x = chirp_sim(buf_theta)
@@ -1382,8 +1381,6 @@ def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
         if verbose:
             print(f'round {round_}: buffer f0 std {buf_theta[:, 0].std():.3f}, '
                   f'posterior f0 std {post[:, 0].std():.3f}')
-    if return_nets:                     # exercise 4.4 needs the trained flows
-        return posts, spectra, (qc, qm, so, tmu, tsd)
     return posts, spectra
 
 
@@ -1451,10 +1448,6 @@ fig.tight_layout()
 #    failure mode of sequential inference: it is not that the posterior is
 #    wide, it is that it is narrow and wrong. What would you monitor to catch
 #    it without knowing the answer?
-# 4. **Fix the over-confidence.** Implement the $L^{-\gamma}$ reweighting
-#    described above: draw from `qc`, evaluate `fm_logprob` under `qc` and
-#    `qm`, and resample with weights $\exp(-\gamma(\log q_c - \log q_m))$.
-#    Does the final width move toward the black contours?
 
 # %%
 
@@ -1525,44 +1518,6 @@ for name, th in [('final posterior', posts[-1][:200].to(dev)),
     chi2 = (d2 - 2 * max_logl(th).max()) / N_T
     print(f'best residual chi2 per sample, {name:19s} {chi2:.3f}')
 
-# %%
-
-# @title Reference solution to 4.4 { display-mode: "form" }
-# The correction is only worth making once the zoom has actually converged, so
-# run twice as long as above -- at 10 rounds the readout is still too WIDE and
-# widening it further would make things worse. Then: draw from q_c, weight by
-# L^(-gamma), resample.
-ps20, _, (qc, qm, so, tmu, tsd) = sequential_chirp(n_rounds=20, gamma=GAMMA,
-                                                   verbose=False, return_nets=True)
-n = 8000
-wp = fm_sample(qc, so.expand(n, K_PCA), 2)
-lqc = fm_logprob(qc, wp, so.expand(n, K_PCA))
-lqm = fm_logprob(qm, wp, torch.zeros(n, K_PCA, device=dev))
-
-logw = -GAMMA * (lqc - lqm)                           # log L^(-gamma), up to a const
-logw[~torch.isfinite(logw)] = -torch.inf
-wt = torch.softmax(logw, 0)
-ess = 1 / (wt ** 2).sum()                             # samples we effectively have
-post_rw = (wp[torch.multinomial(wt, 4000, replacement=True)] * tsd + tmu).cpu()
-
-print(f'importance weights: ESS {ess:.0f} / {n}')
-for lab, q in [('as trained', ps20[-1]), ('reweighted', post_rw)]:
-    w = q[:, 0].std().item()
-    print(f'  {lab:11s} f0 width {w:.4f} = {w / f0_exact:.2f}x exact,  '
-          f'truth at {(THETA_CHIRP[0].item() - q[:, 0].mean().item()) / w:+.1f} sigma')
-
-fig, ax = plt.subplots(figsize=(5.6, 4.4))
-ax.plot(ps20[-1][:, 0], ps20[-1][:, 1], 'C0.', ms=2, alpha=.25,
-        label='readout as trained')
-ax.plot(post_rw[:, 0], post_rw[:, 1], 'C1.', ms=2, alpha=.25,
-        label=r'reweighted by $L^{-\gamma}$')
-ax.contour(f0g.cpu(), fdg.cpu(), p.T, levels=[0.011, 0.61], colors='k', linewidths=1)
-ax.plot(*THETA_CHIRP.cpu(), 'r*', ms=14)
-ax.set(xlabel=r'$f_0$', ylabel=r'$\dot f$', xlim=(F0_LO, F0_HI),
-       ylim=(FD_LO, FD_HI), title='20 rounds: correcting the double-counting')
-ax.legend(markerscale=6, fontsize=8)
-fig.tight_layout()
-
 # %% [markdown]
 
 # **Answers.** (1) $\gamma$ buys speed at the price of safety, and the run above
@@ -1597,18 +1552,9 @@ fig.tight_layout()
 # the zoom landed on a real solution. A posterior that had locked onto a
 # secondary maximum would keep shrinking while this number stayed high — narrow
 # *and* wrong, caught without knowing the answer. The other standard monitors are
-# the effective sample size of the importance weights (printed above; a collapse
-# means the proposal has stopped covering the target) and simply re-running with
-# a different seed to see whether the answers agree.
-#
-# (4) At the ten rounds used above the readout is still three times *wider* than
-# the exact posterior, so reweighting it — which can only widen — makes it worse.
-# Run twenty rounds instead and the picture reverses: the readout comes out at
-# $0.62\times$ the exact width, genuinely over-confident, and the $L^{-\gamma}$
-# correction moves it to $0.74\times$ while pulling the truth from $2.5\sigma$ to
-# $2.1\sigma$ away. The correction is real but it is not the whole story here,
-# and it is worth being clear about which error dominates before applying a fix
-# for the other one.
+# the effective sample size of the importance weights (a collapse means the
+# proposal has stopped covering the target) and simply re-running with a
+# different seed to see whether the answers agree.
 
 # %% [markdown]
 
