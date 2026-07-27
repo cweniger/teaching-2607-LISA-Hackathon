@@ -1,15 +1,15 @@
 # From MLPs to LISA — hands-on SBI tutorial
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb) &nbsp;**the tutorial**
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb) &nbsp;**The main tutorial (from MLPs to sequential SBI)**
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_mbhb_first_steps.ipynb) &nbsp;**the sequential zoom on the MBHB**, with waveforms simulated live
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_mbhb_first_steps.ipynb) &nbsp;**First steps on MBHB analysis**
 
 **[Intro slides](https://cweniger.github.io/teaching-2607-LISA-Hackathon/)** —
 the 30-minute concept lecture given before the tutorial: the science case,
 Bayesian inference, neural networks, SBI, flow matching (with a live demo of
 the flow), and sequential SBI.
 
-A ~95-minute hands-on tutorial for the LISA Hackathon (July 2026): from
+A ~90-minute hands-on tutorial for the LISA Hackathon (July 2026): from
 fitting a sine curve with a neural network to running a sequential
 simulation-based-inference loop on a gravitational-wave signal — with the
 same ten-line flow-matching loss all the way through. The real massive
@@ -49,13 +49,3 @@ The companion notebook needs no pre-simulated data either: it installs the
 lisabeta waveform stack from PyPI wheels (~20 s on Colab) and simulates
 everything live, running the actual dynamic-SBI loop (4 rounds, ~2000 live
 simulations per round) on the 9-parameter MBHB problem.
-
-## Background
-
-The production-scale numbers quoted in Part 4 (sequential SBI reaching
-posteriors ~1 nat from the information-theoretic optimum on the LDC1-1 MBHB
-problem) come from the dynamic-SBI campaign in
-[dsbi-ldc-mbhb](https://github.com/lvhf123/dsbi-ldc-mbhb)
-(`standalone_tests/RESULTS_260721_E1_recipe.md`), built on
-[falcon](https://github.com/cweniger/falcon) and the Dynamic SBI method
-([arXiv:2510.13997](https://arxiv.org/abs/2510.13997)).
