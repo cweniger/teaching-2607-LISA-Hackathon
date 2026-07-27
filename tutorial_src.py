@@ -451,7 +451,7 @@ experiment()
 # %%
 
 # @title Reference solution { display-mode: "form" }
-runs = {
+freq_runs = {
     'baseline':          dict(),
     'no early stopping': dict(rewind=False),
     'width = 8':         dict(width=8),
@@ -461,14 +461,14 @@ runs = {
     'nu up to 12':       dict(nu_hi=12.0),
     'random phase':      dict(random_phase=True),
 }
-res = {}
-for name, kw in runs.items():
+freq_results = {}
+for name, kw in freq_runs.items():
     print(f'{name}:')                              # panels for the two that
     plot = name in ('baseline', 'no early stopping')   # make the point; the rest
-    res[name] = experiment(label=name, plot=plot, **kw)   # go into the table
+    freq_results[name] = experiment(label=name, plot=plot, **kw)  # go in the table
 
 print(f'\n{"setting":18s} {"RMSE":>7s} {"claims":>8s} {"ratio":>7s}')
-for name, (r, sg) in res.items():
+for name, (r, sg) in freq_results.items():
     print(f'{name:18s} {r:7.3f} {sg:8.3f} {r / sg:7.2f}')
 
 # %% [markdown]
@@ -951,12 +951,13 @@ def plot_ridge(ax, x_obs, label=None):
            xlim=(8, 12), ylim=(np.degrees(0.15), 90 - np.degrees(0.15)))
 
 
-THETA_TRUE = torch.tensor([[10.4, 0.62]], device=dev)   # v = 10.4 m/s, alpha = 36 deg
-TWIN = torch.tensor([[10.4, np.pi / 2 - 0.62]], device=dev)      # the 54 deg lob
-paths = ball_path(torch.cat([THETA_TRUE, TWIN])).cpu()
+THETA_BALL = torch.tensor([[10.4, 0.62]], device=dev)   # v = 10.4 m/s, alpha = 36 deg
+THETA_BALL_TWIN = torch.tensor([[10.4, np.pi / 2 - 0.62]], device=dev)  # the 54 deg lob
+paths = ball_path(torch.cat([THETA_BALL, THETA_BALL_TWIN])).cpu()
 
 fig, ax = plt.subplots(figsize=(6.5, 3.0))
-for p, th, c in zip(paths, torch.cat([THETA_TRUE, TWIN]).cpu(), ['C0', 'C3']):
+for p, th, c in zip(paths, torch.cat([THETA_BALL, THETA_BALL_TWIN]).cpu(),
+                    ['C0', 'C3']):
     ax.plot(p[:, 0], p[:, 1], c, lw=1.5,
             label=fr'$v$ = {th[0]:.1f} m/s, '
                   fr'$\alpha$ = {th[1].rad2deg():.0f}$^\circ$')
@@ -971,7 +972,7 @@ fig.tight_layout()
 #
 # `VelocityNet`, `fm_loss`, `train_fm` and `fm_sample` are the Part 2
 # functions, untouched. The only difference is that `cond` is now the output of
-# a simulator. 
+# a simulator.
 #
 # We do it twice: once with a **single** throw, and once with the mean of
 # **twenty** throws (which shrinks the noise on the measurement to
@@ -979,11 +980,7 @@ fig.tight_layout()
 
 # %%
 
-def zscore(a, mean, std):
-    return (a - mean) / std
-
-
-def run_ball_sbi(n_throws, n_train=40000, steps=3000):
+def run_ball_sbi(n_throws, n_train=40000, steps=3000, theta_true=THETA_BALL):
     """Simulate a training set, fit q(theta | x), return posterior samples."""
     theta = sample_theta(n_train)                     # theta_i ~ prior
     x = sample_x(theta, n_throws)                     # x_i ~ p(x | theta_i)
@@ -991,11 +988,13 @@ def run_ball_sbi(n_throws, n_train=40000, steps=3000):
     xmu, xsd = x.mean(0), x.std(0)
 
     net = VelocityNet(2, d_cond=1).to(dev)            # w = theta (2), cond = x (1)
-    train_fm(net, zscore(theta, tmu, tsd), zscore(x, xmu, xsd), steps=steps)
+    # z-score both sides -- subtract the mean, divide by the standard deviation
+    # -- so the network sees O(1) numbers, exactly as in Part 1
+    train_fm(net, (theta - tmu) / tsd, (x - xmu) / xsd, steps=steps)
 
-    x_obs = sample_x(THETA_TRUE, n_throws)            # our observation
-    so = zscore(x_obs, xmu, xsd).expand(6000, 1)
-    post = fm_sample(net, so, 2) * tsd + tmu
+    x_obs = sample_x(theta_true, n_throws)            # our observation
+    so = ((x_obs - xmu) / xsd).expand(6000, 1)
+    post = fm_sample(net, so, 2) * tsd + tmu          # undo the z-score
     return post.cpu(), x_obs.item()
 
 
@@ -1010,7 +1009,7 @@ fig, ax = plt.subplots(1, 2, figsize=(11, 4.6), sharey=True)
 for a, post, xo, nt in [(ax[0], post_1, x_obs_1, 1), (ax[1], post_20, x_obs_20, 20)]:
     plot_ridge(a, xo)
     a.plot(post[:, 0], post[:, 1].rad2deg(), 'C0.', ms=1.5, alpha=.25)
-    a.plot(THETA_TRUE[0, 0].cpu(), THETA_TRUE[0, 1].rad2deg().cpu(), 'r*', ms=15)
+    a.plot(THETA_BALL[0, 0].cpu(), THETA_BALL[0, 1].rad2deg().cpu(), 'r*', ms=15)
     a.set_title(f'{nt} throw{"s" if nt > 1 else ""}:  x = {xo:.2f} m')
 ax[1].set_ylabel('')
 fig.tight_layout()
@@ -1053,12 +1052,12 @@ x_b = sample_x(theta_b, 1)
 tmu_b, tsd_b = theta_b.mean(0), theta_b.std(0)
 xmu_b, xsd_b = x_b.mean(0), x_b.std(0)
 net_b = VelocityNet(2, d_cond=1).to(dev)
-train_fm(net_b, zscore(theta_b, tmu_b, tsd_b), zscore(x_b, xmu_b, xsd_b), log=False)
+train_fm(net_b, (theta_b - tmu_b) / tsd_b, (x_b - xmu_b) / xsd_b, log=False)
 
 fig, ax = plt.subplots(1, 3, figsize=(14, 4.4), sharey=True)
 for a, xo in zip(ax, [6.0, 9.5, 11.5]):
     xt = torch.tensor([[xo]], device=dev)
-    post = (fm_sample(net_b, zscore(xt, xmu_b, xsd_b).expand(6000, 1), 2)
+    post = (fm_sample(net_b, ((xt - xmu_b) / xsd_b).expand(6000, 1), 2)
             * tsd_b + tmu_b).cpu()
     plot_ridge(a, xo)
     a.plot(post[:, 0], post[:, 1].rad2deg(), 'C0.', ms=1.5, alpha=.25)
@@ -1080,11 +1079,11 @@ def sample_x2(theta, n_throws=1):
 x_b2 = sample_x2(theta_b, 1)
 x2mu, x2sd = x_b2.mean(0), x_b2.std(0)
 net_b2 = VelocityNet(2, d_cond=2).to(dev)
-train_fm(net_b2, zscore(theta_b, tmu_b, tsd_b), zscore(x_b2, x2mu, x2sd),
+train_fm(net_b2, (theta_b - tmu_b) / tsd_b, (x_b2 - x2mu) / x2sd,
          steps=6000, log=False)          # this posterior is small: train longer
 
-x_obs2 = sample_x2(THETA_TRUE, 1)
-post2 = (fm_sample(net_b2, zscore(x_obs2, x2mu, x2sd).expand(6000, 2), 2)
+x_obs2 = sample_x2(THETA_BALL, 1)
+post2 = (fm_sample(net_b2, ((x_obs2 - x2mu) / x2sd).expand(6000, 2), 2)
          * tsd_b + tmu_b).cpu()
 
 fig, ax = plt.subplots(figsize=(5.8, 4.6))
@@ -1096,7 +1095,7 @@ ax.plot(vv.cpu(), torch.asin(sa.masked_fill(sa > 1, float('nan'))).rad2deg().cpu
         'k:', lw=1.4, label='time of flight alone')
 ax.plot(post2[:, 0], post2[:, 1].rad2deg(), 'C2.', ms=1.5, alpha=.25,
         label='posterior from both')
-ax.plot(THETA_TRUE[0, 0].cpu(), THETA_TRUE[0, 1].rad2deg().cpu(), 'r*', ms=15)
+ax.plot(THETA_BALL[0, 0].cpu(), THETA_BALL[0, 1].rad2deg().cpu(), 'r*', ms=15)
 ax.legend(fontsize=8, markerscale=6, loc='upper right')
 ax.set_title('two observables: the posterior sits where the curves cross')
 fig.tight_layout()
@@ -1120,7 +1119,7 @@ fig.tight_layout()
 # ---
 # # Part 4 — A toy gravitational wave: compression + sequential zoom
 #
-# Now let us look at a a long noisy time series containing a
+# Now let us look at a long noisy time series containing a
 # chirp,
 # $$d(t) = A\sin\!\big(2\pi(f_0 t + \tfrac12 \dot f t^2) + \varphi\big)
 #          + n(t), \qquad n\sim\mathcal N(0,1),$$
@@ -1130,7 +1129,8 @@ fig.tight_layout()
 #
 # Two new problems appear:
 # 1. $x$ has 1024 dimensions — we need to **compress** before conditioning. We do that here classically with PCA.
-# 2. With many cycles the likelihood is razor-sharp: when trained witha small amount of simulations, an amortized net trained
+# 2. With many cycles the likelihood is razor-sharp: when trained on a small
+#    number of simulations, an amortized net trained
 #    from the wide prior turns out too blurry. We fix that by **zooming in sequentially** (this is sequential SBI).  Sequential SBI
 #    leads to results that are not amortized but focused on the region of interest, reducing the number of required simulator calls.
 
@@ -1141,7 +1141,7 @@ tgrid = torch.linspace(0, 1, N_T, device=dev)
 PRIOR_LO = torch.tensor([40., 0.], device=dev)      # f0 [cycles], fdot
 PRIOR_HI = torch.tensor([80., 40.], device=dev)
 AMP = 1.0
-THETA_TRUE = torch.tensor([55.3, 17.8], device=dev)
+THETA_CHIRP = torch.tensor([55.3, 17.8], device=dev)
 
 
 def chirp_sim(theta, noise=1.0, phi=None):
@@ -1154,13 +1154,13 @@ def chirp_sim(theta, noise=1.0, phi=None):
 
 
 torch.manual_seed(7)
-x_obs_chirp = chirp_sim(THETA_TRUE[None], phi=torch.tensor([[2.1]], device=dev))
+x_obs_chirp = chirp_sim(THETA_CHIRP[None], phi=torch.tensor([[2.1]], device=dev))
 snr = AMP * np.sqrt(N_T / 2)
 print(f'signal-to-noise ratio ~ {snr:.0f}')
 
 fig, ax = plt.subplots(figsize=(10, 2.6))
 ax.plot(tgrid.cpu(), x_obs_chirp[0].cpu(), lw=.5, label='observed (signal+noise)')
-ax.plot(tgrid.cpu(), chirp_sim(THETA_TRUE[None], noise=0,
+ax.plot(tgrid.cpu(), chirp_sim(THETA_CHIRP[None], noise=0,
                                phi=torch.tensor([[2.1]], device=dev))[0].cpu(),
         'C1', lw=1, label='hidden signal')
 ax.legend(loc='upper right'); ax.set(xlabel='t', ylabel='d(t)')
@@ -1217,10 +1217,6 @@ def summarize(x, mu, V):
     return (x - mu) @ V.T
 
 
-def zscore(a, mean, std):
-    return (a - mean) / std
-
-
 x_bank = chirp_sim(theta_bank)                  # add noise: this is the training data
 
 s_bank = summarize(x_bank, mu0, V0)
@@ -1228,10 +1224,10 @@ s_mu, s_sd = s_bank.mean(0), s_bank.std(0) + 1e-6
 th_mu, th_sd = theta_bank.mean(0), theta_bank.std(0)
 
 cnet = VelocityNet(2, K_PCA).to(dev)
-train_fm(cnet, zscore(theta_bank, th_mu, th_sd),
-         zscore(s_bank, s_mu, s_sd), steps=6000)
+train_fm(cnet, (theta_bank - th_mu) / th_sd,     # z-score both sides, as always
+         (s_bank - s_mu) / s_sd, steps=6000)
 
-s_obs = zscore(summarize(x_obs_chirp, mu0, V0), s_mu, s_sd)
+s_obs = (summarize(x_obs_chirp, mu0, V0) - s_mu) / s_sd
 post0 = fm_sample(cnet, s_obs.expand(4000, K_PCA), 2) * th_sd + th_mu
 
 # %%
@@ -1269,7 +1265,7 @@ p = (lp - lp.max()).exp()
 ax.add_patch(plt.Rectangle((F0_LO, FD_LO), F0_HI - F0_LO, FD_HI - FD_LO,
                            fill=False, ec='k', lw=1.5,
                            label='exact posterior (inside this box)'))
-ax.plot(*THETA_TRUE.cpu(), 'r*', ms=14, label='truth')
+ax.plot(*THETA_CHIRP.cpu(), 'r*', ms=14, label='truth')
 ax.set(xlabel=r'$f_0$', ylabel=r'$\dot f$', xlim=(48, 64), ylim=(8, 28))
 ax.legend(fontsize=8)
 ax.set_title('amortized: roughly the right place, far too blurry')
@@ -1316,14 +1312,17 @@ print(f'training samples in the posterior neighbourhood: {inside.sum().item()} /
 def fm_logprob(net, w1, cond, steps=64):
     """log q(w1|cond) via reverse ODE + divergence (exact, per-dimension autograd)."""
     w = w1.clone()
+    n_dim = w1.shape[1]
     logdet = torch.zeros(len(w1), device=w1.device)
     for i in range(steps):
         t = torch.full((len(w1), 1), 1 - (i + 0.5) / steps, device=w1.device)
         with torch.enable_grad():
             wg = w.requires_grad_(True)
             v = net(wg, t, cond)
-            div = sum(torch.autograd.grad(v[:, d].sum(), wg, retain_graph=(d == 0))[0][:, d]
-                      for d in range(w1.shape[1]))
+            # keep the graph alive for every dimension but the last one
+            div = sum(torch.autograd.grad(v[:, d].sum(), wg,
+                                          retain_graph=(d < n_dim - 1))[0][:, d]
+                      for d in range(n_dim))
         w = (w - v / steps).detach()
         logdet = logdet - div.detach() / steps
     base = (-0.5 * (w ** 2).sum(1) - 0.5 * w.shape[1] * np.log(2 * np.pi))
@@ -1332,7 +1331,8 @@ def fm_logprob(net, w1, cond, steps=64):
 # %%
 
 def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
-                     loss_fn=fm_loss, verbose=True, return_nets=False):
+                     loss_fn=fm_loss, verbose=True, return_nets=False,
+                     x_obs=x_obs_chirp):
     torch.manual_seed(1)
     buf_theta = draw_prior(4096)
     buf_x = chirp_sim(buf_theta)
@@ -1350,9 +1350,9 @@ def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
         s = summarize(buf_x, mu, V)
         smu, ssd = s.mean(0), s.std(0) + 1e-6
         tmu, tsd = buf_theta.mean(0), buf_theta.std(0)
-        w1 = zscore(buf_theta, tmu, tsd)
-        sc = zscore(s, smu, ssd)
-        so = zscore(summarize(x_obs_chirp, mu, V), smu, ssd)
+        w1 = (buf_theta - tmu) / tsd                     # z-scored parameters
+        sc = (s - smu) / ssd                             # z-scored summaries
+        so = (summarize(x_obs, mu, V) - smu) / ssd       # ... and the observation
         # -- continue training conditional q_c(theta|s) and marginal q_m(theta)
         for net, opt, cond in [(qc, opt_c, sc), (qm, opt_m, torch.zeros_like(sc))]:
             for step in range(500):
@@ -1400,7 +1400,7 @@ for r, (post, c) in enumerate(zip(posts, colors), 1):
 for a in ax[:2]:
     a.contour(f0g.cpu(), fdg.cpu(), p.T, levels=[0.011, 0.61], colors='k',
               linewidths=1)
-    a.plot(*THETA_TRUE.cpu(), 'r*', ms=14)
+    a.plot(*THETA_CHIRP.cpu(), 'r*', ms=14)
     a.set(xlabel=r'$f_0$', ylabel=r'$\dot f$')
 ax[0].set(xlim=(40, 80), ylim=(0, 40), title='the zoom trajectory')
 ax[1].set(xlim=(F0_LO, F0_HI), ylim=(FD_LO, FD_HI),
@@ -1434,7 +1434,8 @@ fig.tight_layout()
 # through the buffer and once through the conditioning, and the readout behaves
 # like $L^{1+\gamma}\pi$ rather than $L\pi$. Correcting it means importance
 # reweighting the readout by $L^{-\gamma}$, which the ratio
-# $\log q_c - \log q_m$ already gives us. This here is a simple example, but complete implementioned would exactly do that;
+# $\log q_c - \log q_m$ already gives us. This here is a simple example, but a
+# complete implementation would do exactly that;
 # we leave it out to keep the loop readable.
 #
 # **Exercise 4.**
@@ -1468,11 +1469,11 @@ fig.tight_layout()
 # is what the zoom is supposed to shrink.
 GAMMA, N_R = 0.3, len(posts)
 
-runs = {f'baseline (gamma = {GAMMA})': posts}
+zoom_runs = {f'baseline (gamma = {GAMMA})': posts}
 for name, kw in [('gamma = 0.1', dict(gamma=0.1)),
                  ('gamma = 1.0', dict(gamma=1.0)),
                  ('frozen PCA basis', dict(refit_pca=False))]:
-    runs[name], _ = sequential_chirp(n_rounds=N_R, verbose=False, **kw)
+    zoom_runs[name], _ = sequential_chirp(n_rounds=N_R, verbose=False, **kw)
 
 # the exact posterior width in f0, from the grid we already computed (p, f0g)
 pw = np.asarray(p) / np.asarray(p).sum()
@@ -1480,13 +1481,13 @@ f0n = f0g.cpu().numpy()[:, None]
 f0_exact = np.sqrt((pw * (f0n - (pw * f0n).sum()) ** 2).sum())
 
 print(f'\n{"run":26s} {"f0 width":>9s} {"vs exact":>9s} {"truth at":>12s}')
-for name, ps in runs.items():
+for name, ps in zoom_runs.items():
     w = ps[-1][:, 0].std().item()
-    off = (THETA_TRUE[0].item() - ps[-1][:, 0].mean().item()) / w
+    off = (THETA_CHIRP[0].item() - ps[-1][:, 0].mean().item()) / w
     print(f'{name:26s} {w:9.4f} {w / f0_exact:8.2f}x {off:+8.1f} sigma')
 
 fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.4))
-for name, ps in runs.items():
+for name, ps in zoom_runs.items():
     ax[0].semilogy(range(1, N_R + 1), [q[:, 0].std().item() for q in ps], 'o-',
                    ms=4, label=name)
     ax[1].plot(ps[-1][:, 0], ps[-1][:, 1], '.', ms=1.5, alpha=.2, label=name)
@@ -1496,7 +1497,7 @@ ax[0].set(xlabel='round', ylabel=r'posterior width in $f_0$',
 ax[0].legend(fontsize=8)
 ax[1].contour(f0g.cpu(), fdg.cpu(), p.T, levels=[0.011, 0.61], colors='k',
               linewidths=1)
-ax[1].plot(*THETA_TRUE.cpu(), 'r*', ms=14)
+ax[1].plot(*THETA_CHIRP.cpu(), 'r*', ms=14)
 ax[1].set(xlabel=r'$f_0$', ylabel=r'$\dot f$', xlim=(F0_LO, F0_HI),
           ylim=(FD_LO, FD_HI), title=f'round {N_R} against the exact posterior')
 ax[1].legend(markerscale=8, fontsize=8)
@@ -1510,12 +1511,12 @@ fig.tight_layout()
 # likelihood over the phase (a matched filter) and look at the residual: it
 # should be consistent with pure noise, chi^2 per sample = 1.
 
-def max_logl(theta, n_phi=64):
+def max_logl(theta, x_obs=x_obs_chirp, n_phi=64):
     """log L of each theta with the nuisance phase maximized out -> (n,)."""
     ph = 2 * np.pi * (theta[:, :1] * tgrid + 0.5 * theta[:, 1:2] * tgrid ** 2)
     phis = torch.linspace(0, 2 * np.pi, n_phi, device=dev)[:, None, None]
     h = AMP * torch.sin(ph + phis)                    # (n_phi, n, N_T) templates
-    return (h @ x_obs_chirp[0] - 0.5 * (h ** 2).sum(-1)).max(0).values
+    return (h @ x_obs[0] - 0.5 * (h ** 2).sum(-1)).max(0).values
 
 
 d2 = (x_obs_chirp[0] ** 2).sum()                      # chi^2 of doing nothing
@@ -1548,7 +1549,7 @@ print(f'importance weights: ESS {ess:.0f} / {n}')
 for lab, q in [('as trained', ps20[-1]), ('reweighted', post_rw)]:
     w = q[:, 0].std().item()
     print(f'  {lab:11s} f0 width {w:.4f} = {w / f0_exact:.2f}x exact,  '
-          f'truth at {(THETA_TRUE[0].item() - q[:, 0].mean().item()) / w:+.1f} sigma')
+          f'truth at {(THETA_CHIRP[0].item() - q[:, 0].mean().item()) / w:+.1f} sigma')
 
 fig, ax = plt.subplots(figsize=(5.6, 4.4))
 ax.plot(ps20[-1][:, 0], ps20[-1][:, 1], 'C0.', ms=2, alpha=.25,
@@ -1556,7 +1557,7 @@ ax.plot(ps20[-1][:, 0], ps20[-1][:, 1], 'C0.', ms=2, alpha=.25,
 ax.plot(post_rw[:, 0], post_rw[:, 1], 'C1.', ms=2, alpha=.25,
         label=r'reweighted by $L^{-\gamma}$')
 ax.contour(f0g.cpu(), fdg.cpu(), p.T, levels=[0.011, 0.61], colors='k', linewidths=1)
-ax.plot(*THETA_TRUE.cpu(), 'r*', ms=14)
+ax.plot(*THETA_CHIRP.cpu(), 'r*', ms=14)
 ax.set(xlabel=r'$f_0$', ylabel=r'$\dot f$', xlim=(F0_LO, F0_HI),
        ylim=(FD_LO, FD_HI), title='20 rounds: correcting the double-counting')
 ax.legend(markerscale=6, fontsize=8)
