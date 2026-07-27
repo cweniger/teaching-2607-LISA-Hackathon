@@ -82,6 +82,7 @@ class MLP(nn.Module):
     """A dense feed-forward network from R^d_in to R^d_out."""
 
     def __init__(self, d_in=1, d_out=1, hidden=256, act=torch.relu):
+        """Three hidden layers of width `hidden`, nonlinearity `act`."""
         super().__init__()
         self.act = act                             # torch.relu, torch.selu, ...
         self.fc1 = nn.Linear(d_in, hidden)         # W1: (hidden, d_in)
@@ -89,7 +90,9 @@ class MLP(nn.Module):
         self.fc3 = nn.Linear(hidden, hidden)       # W3: (hidden, hidden)
         self.out = nn.Linear(hidden, d_out)        # W4: (d_out, hidden)
 
-    def forward(self, x):           # x: (n, d_in) — n points, d_in features each
+    def forward(self, x):
+        """Run the chain of affine maps and nonlinearities: (n, d_in) -> (n, d_out)."""
+        # x: (n, d_in) — n points, d_in features each
         h = self.act(self.fc1(x))   # W1 @ x + b1, then g   -> (n, hidden)
         h = self.act(self.fc2(h))   # W2 @ h + b2, then g   -> (n, hidden)
         h = self.act(self.fc3(h))   # W3 @ h + b3, then g   -> (n, hidden)
@@ -640,9 +643,12 @@ fig.tight_layout()
 
 # %%
 
-# Generic MLP helper: same idea as Part 1's MLP class, but with configurable
-# input/output dimensions and depth.
 def mlp(d_in, d_out, hidden, layers):
+    """Generic MLP helper: R^d_in -> R^d_out through `layers` hidden blocks.
+
+    The same idea as Part 1's MLP class, but with the input/output dimensions
+    and the depth configurable rather than fixed at three hidden layers.
+    """
     mods, d = [], d_in                              # mods: the layer list so far
     for _ in range(layers):                         # one hidden block per layer
         mods += [nn.Linear(d, hidden), nn.ReLU()]   # affine map, then ReLU
@@ -663,12 +669,14 @@ class VelocityNet(nn.Module):
     """Velocity field v(theta, t | cond): an MLP with a Fourier embedding of t."""
 
     def __init__(self, d_theta, d_cond, hidden=128, layers=3):
+        """A velocity field on R^d_theta, conditioned on d_cond extra numbers."""
         super().__init__()
         self.freqs = torch.tensor([1., 2., 4., 8.])           # time-embedding freqs
         # inputs: theta (d_theta) + time embedding (9) + conditioning (d_cond)
         self.net = mlp(d_theta + 9 + d_cond, d_theta, hidden, layers)
 
     def forward(self, th, t, cond):
+        """th (n, d_theta), t (n, 1), cond (n, d_cond) -> velocity (n, d_theta)."""
         ft = 2 * np.pi * t * self.freqs.to(t.device)          # (n, 4) scaled times
         temb = torch.cat([t, ft.sin(), ft.cos()], 1)          # (n, 9): t and 4 sin/cos
         # a raw scalar t is hard for an MLP to resolve finely; sin/cos of several
@@ -824,6 +832,7 @@ def study_conditional(my_target, n_data=40000, steps=4000,
 # TODO — your code here. my_target takes one float c in [0, 1] and returns one
 # 2-D sample. Below: a Gaussian blob whose centre slides with c. Replace it.
 def my_target(c):
+    """A Gaussian blob whose centre slides with c: float in [0, 1] -> one 2-D sample."""
     return np.array([4 * c - 2, 0.0]) + 0.3 * np.random.randn(2)
 
 
@@ -1197,6 +1206,12 @@ fig.tight_layout()
 # %%
 
 def fit_pca(theta_bank, K=64):
+    """Find the directions in which CLEAN signals from theta_bank actually vary.
+
+    Returns (mu, V, eigs): the mean waveform (N_T,), the top-K principal
+    directions V (K, N_T) to project onto, and the singular values rescaled
+    into a per-component signal-to-noise (all of them, for the spectrum plot).
+    """
     clean = chirp_sim(theta_bank, noise=0.0)
     mu = clean.mean(0)
     U, S, Vh = torch.linalg.svd(clean - mu, full_matrices=False)
@@ -1205,6 +1220,7 @@ def fit_pca(theta_bank, K=64):
 
 
 def draw_prior(n):
+    """The prior: n draws of theta = (f0, fdot), uniform in the box -> (n, 2)."""
     return PRIOR_LO + (PRIOR_HI - PRIOR_LO) * torch.rand(n, 2, device=dev)
 
 
@@ -1233,6 +1249,7 @@ fig.tight_layout()
 # %%
 
 def summarize(x, mu, V):
+    """Compress data onto the PCA basis: x (n, N_T) -> summaries (n, K)."""
     return (x - mu) @ V.T
 
 
@@ -1351,6 +1368,23 @@ def fm_logprob(net, w1, cond, steps=64):
 
 def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
                      loss_fn=fm_loss, verbose=True, x_obs=x_obs_chirp):
+    """Zoom in on the posterior by moving the training distribution, round by round.
+
+    Each round: refit the PCA basis and the z-scores on the current buffer,
+    continue training two warm-started flows -- the conditional q_c(theta|s)
+    and the marginal q_m(theta) -- propose from a 50/50 mixture of the two,
+    weight the proposals toward the tempered posterior L^gamma * prior (the
+    ratio q_c/q_m stands in for the likelihood), keep n_keep of them without
+    replacement, simulate those, and refresh the buffer.
+
+    Arguments worth turning in Exercise 4:
+      gamma      tempering exponent. Larger zooms faster but leaves less
+                 safety margin if an early round's estimate excludes the truth.
+      refit_pca  refit the compression basis every round, or freeze round 1's.
+
+    Returns (posts, spectra): the posterior samples read out at the end of each
+    round, and each round's PCA singular-value spectrum.
+    """
     torch.manual_seed(1)
     buf_theta = draw_prior(4096)
     buf_x = chirp_sim(buf_theta)
