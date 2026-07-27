@@ -1612,6 +1612,23 @@ def fm_logprob(net, w1, cond, steps=64):
     base = (-0.5 * (w ** 2).sum(1) - 0.5 * w.shape[1] * np.log(2 * np.pi))
     return base + logdet
 
+# %% [markdown]
+
+# ### How each round proposes
+#
+# Draw from a 50/50 mixture of the two flows, $q_c(\theta \,|\, s_{\rm obs})$ and
+# $q_m(\theta)$ — the conditional zooms in, the marginal keeps a safety net — and
+# reweight those draws toward the **tempered** posterior $L^\gamma \pi$. The
+# likelihood is never evaluated: both flows are trained on the same buffer, so
+# $q_c \propto L\,q_m$ and the *ratio* is the likelihood. Up to constants,
+#
+# $$\log w \;=\; \gamma\,\big(\log q_c - \log q_m\big) \;-\; \log\big(q_c + q_m\big),$$
+#
+# set to $-\infty$ outside the prior box. The top `n_keep` weights — jittered by
+# Gumbel noise, so this draws rather than takes the mode — are simulated and
+# become the next buffer. $\gamma < 1$ keeps that buffer a little wider than the
+# posterior itself.
+
 # %%
 
 def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
