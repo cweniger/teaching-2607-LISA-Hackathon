@@ -2523,6 +2523,34 @@
     </section>
     </section>
 
+    <!-- MBHB — sequential SBI from the full prior (new, live result) -->
+    <section>
+      <p class="eyebrow">Applications &gt; Underexplored capabilities of SBI</p>
+      <h2>Sequential: LDC1-1 MBHB from the <em>full</em> prior</h2>
+
+      <div style="display:flex; gap:16px; margin-top:4px; align-items:flex-start;">
+        <div style="flex:1; text-align:center;">
+          <img src="img/p_widecat_buffer.gif" style="max-width:100%; max-height:430px;">
+          <p style="font-size:0.6em; color:#7f8c8d; margin:2px 0 0;">training buffer, round by round</p>
+        </div>
+        <div style="flex:1; text-align:center;">
+          <img src="img/p_widecat_corner.png" style="max-width:100%; max-height:430px;">
+          <p style="font-size:0.6em; color:#7f8c8d; margin:2px 0 0;">final posterior (red = injected truth)</p>
+        </div>
+      </div>
+
+      <ul style="margin:6px 0 0; font-size:0.72em;">
+        <li><strong>Left:</strong> each frame is one round's training buffer. The proposal starts at the
+            full LDC prior &mdash; all-sky, \(\pm\)half a day in \(t_c\), signed spins &mdash; and contracts
+            onto the source; the inset shows predictive waveforms converging on the data.</li>
+        <li><strong>Right:</strong> the result &mdash; 83 rounds, 1.30M waveforms, 1h57m on one GPU,
+            eight of nine parameters within \(1\sigma\). No narrowed prior, no template bank.</li>
+        <li><strong>The readout is the check, not the loss.</strong> Importance weights against the
+            tempered proposal give \(\hat{k}=0.50\) and 41767 effective samples. A run whose training
+            losses looked <em>better</em> throughout gave \(\hat{k}=\infty\) &mdash; only this diagnostic caught it.</li>
+      </ul>
+    </section>
+
 
 
     <!-- ============================================================ -->
@@ -2535,6 +2563,17 @@
         <h1>Hands-on</h1>
         <p>From MLPs to LISA &mdash; everything above, in ~170 lines of PyTorch</p>
         <div class="grad-bar below"></div>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:center; gap:22px; margin-top:26px;">
+        <img src="img/estec-sbi26-qr.png" alt="QR code to the hands-on material"
+             style="width:190px; background:#fff; padding:8px; border-radius:10px;">
+        <div style="text-align:left;">
+          <div style="font-family:'Space Grotesk',sans-serif; font-size:0.6em; letter-spacing:0.1em;
+                      text-transform:uppercase; color:#95a5a6; margin-bottom:6px;">All material</div>
+          <a href="https://tinyurl.com/estec-sbi26"
+             style="font-family:'Space Grotesk',sans-serif; font-size:1.15em; font-weight:700;
+                    color:#f39c12; text-decoration:none;">tinyurl.com/estec-sbi26</a>
+        </div>
       </div>
     </section>
 
@@ -2603,13 +2642,23 @@
             <p style="margin:7px 0 0; color:#7f8c8d;">Everything also runs on CPU, just slower.</p>
           </div>
 
-          <div style="background:#2c3e50; border-radius:8px; padding:10px 12px; margin-top:11px;">
-            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.62em; color:#95a5a6;
-                        letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">Repository</div>
-            <code style="font-size:0.68em; color:#ecf0f1; background:none; word-break:break-all;">github.com/cweniger/<br>teaching-2607-LISA-Hackathon</code>
-            <div style="font-family:'Space Grotesk',sans-serif; font-size:0.62em; color:#95a5a6;
-                        letter-spacing:0.1em; text-transform:uppercase; margin:9px 0 5px;">Notebook</div>
-            <code style="font-size:0.68em; color:#f39c12; background:none; word-break:break-all;">tutorial_lisa_sbi.ipynb</code>
+          <div style="background:#2c3e50; border-radius:8px; padding:10px 12px; margin-top:11px;
+                      display:flex; gap:12px; align-items:center;">
+            <div style="flex:1;">
+              <div style="font-family:'Space Grotesk',sans-serif; font-size:0.62em; color:#95a5a6;
+                          letter-spacing:0.1em; text-transform:uppercase; margin-bottom:5px;">All material</div>
+              <a href="https://tinyurl.com/estec-sbi26" style="font-family:'Space Grotesk',sans-serif;
+                 font-size:0.8em; font-weight:700; color:#f39c12; text-decoration:none;
+                 word-break:break-all;">tinyurl.com/estec-sbi26</a>
+              <div style="font-family:'Space Grotesk',sans-serif; font-size:0.62em; color:#95a5a6;
+                          letter-spacing:0.1em; text-transform:uppercase; margin:9px 0 5px;">Repository</div>
+              <code style="font-size:0.68em; color:#ecf0f1; background:none; word-break:break-all;">github.com/cweniger/<br>teaching-2607-LISA-Hackathon</code>
+              <div style="font-family:'Space Grotesk',sans-serif; font-size:0.62em; color:#95a5a6;
+                          letter-spacing:0.1em; text-transform:uppercase; margin:9px 0 5px;">Notebook</div>
+              <code style="font-size:0.68em; color:#f39c12; background:none; word-break:break-all;">tutorial_lisa_sbi.ipynb</code>
+            </div>
+            <img src="img/estec-sbi26-qr.png" alt="QR code to the hands-on material"
+                 style="flex:0 0 94px; width:94px; background:#fff; padding:5px; border-radius:6px;">
           </div>
 
           <p style="margin:9px 2px 0; font-size:0.88em; color:#7f8c8d;">
