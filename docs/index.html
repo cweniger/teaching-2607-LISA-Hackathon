@@ -1553,6 +1553,7 @@
 
     <!-- FM 2 — the three equations -->
     <section>
+    <section>
       <p class="eyebrow">Foundations of SBI &gt; Flow matching</p>
       <h2>Flow matching in three equations</h2>
       <p class="subtitle" style="margin-top:0;">Start from a unit Gaussian and <em>move the points</em> until they are distributed like \(p\).</p>
@@ -1595,6 +1596,56 @@
         Lipman <em>et al.</em> 2022, arXiv:2210.02747 &middot; Liu <em>et al.</em> 2022, arXiv:2209.03003 &middot;
         Albergo &amp; Vanden-Eijnden 2022, arXiv:2209.15571 &middot; for GW posteriors: Dax <em>et al.</em> 2023, arXiv:2305.17161
       </p>
+    </section>
+
+    <!-- FM 2b — down-slide: why regressing on random pairs works -->
+    <section>
+      <p class="eyebrow">Foundations of SBI &gt; Flow matching</p>
+      <h2>Aside: why <em style="font-style:normal; color:#e67e22;">random pairs</em> give the right field</h2>
+      <p class="subtitle" style="margin-top:0;">Straight lines cross, so no single pair defines the motion. Least squares averages them &mdash; and that average is exactly right.</p>
+
+      <div style="font-size:0.8em; line-height:1.45; margin-top:6px;">
+
+        <p style="margin:0;"><strong>To prove.</strong> With \(p_t=\mathrm{Law}(\theta_t)\), the field must satisfy the <strong>continuity equation</strong>
+          &mdash; then the ODE's marginals <em>are</em> \(p_t\), and \(\theta(1)\sim p_1=p\):</p>
+        <div style="text-align:center; margin:0;">
+          \[ \partial_t p_t + \nabla\!\cdot\!\big(p_t\,v^\star\big) = 0 ,
+             \qquad v^\star(x,t)=\mathbb E\big[\theta_1-\theta_0 \,\big|\, \theta_t=x\big] \]
+        </div>
+
+        <p style="margin:4px 0 0;"><strong>Proof.</strong> For any test function \(\varphi\):</p>
+        <div style="text-align:center; margin:0;">
+          \[ \begin{aligned}
+             \int \varphi\,\partial_t p_t \,dx
+             &= \frac{d}{dt}\,\mathbb E\big[\varphi(\theta_t)\big]
+              = \mathbb E\big[\nabla\varphi(\theta_t)\cdot(\theta_1-\theta_0)\big]
+             \;\overset{\text{tower}}{=}\; \mathbb E\big[\nabla\varphi(\theta_t)\cdot v^\star(\theta_t,t)\big] \\[2pt]
+             &= \int \nabla\varphi\cdot v^\star\,p_t\,dx
+             \;\overset{\text{by parts}}{=}\; -\int \varphi\,\nabla\!\cdot\!\big(p_t v^\star\big)\,dx
+             \qquad\blacksquare
+             \end{aligned} \]
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; margin-top:10px; font-size:0.72em; line-height:1.4;">
+        <div class="box box-blue" style="flex:1; margin:0;">
+          <strong>Where each step comes from</strong>
+          <ul style="margin:4px 0 0; padding-left:1.1em;">
+            <li>\(\theta_t\) is affine in \(t\), so \(\dot\theta_t=\theta_1-\theta_0\)</li>
+            <li>\(\nabla\varphi(\theta_t)\) depends only on \(\theta_t\) &rarr; swap the arrow for its conditional mean</li>
+            <li>\(\varphi\) arbitrary &rarr; the equation holds pointwise</li>
+          </ul>
+        </div>
+        <div class="box box-orange" style="flex:1; margin:0;">
+          <strong>What this does <em>not</em> say</strong>
+          <ul style="margin:4px 0 0; padding-left:1.1em;">
+            <li>The trajectories are not the straight lines &mdash; those cross, ODE paths cannot</li>
+            <li>The pairing is destroyed; only \(p_t\) survives, so the coupling need not be optimal</li>
+            <li>Endpoints are free: \(p_0=\mathcal N(0,I)\), \(p_1=p\) by construction</li>
+          </ul>
+        </div>
+      </div>
+    </section>
     </section>
 
     <!-- FM 3 — live demo of the flow -->
