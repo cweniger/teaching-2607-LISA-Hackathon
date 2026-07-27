@@ -2534,17 +2534,17 @@
       <div class="stack">
         <div class="grad-bar"></div>
         <h1>Hands-on</h1>
-        <p>From MLPs to LISA &mdash; everything above, in ~150 lines of PyTorch</p>
+        <p>From MLPs to LISA &mdash; everything above, in ~170 lines of PyTorch</p>
         <div class="grad-bar below"></div>
       </div>
     </section>
 
-    <!-- Tutorial 1 — the five parts -->
+    <!-- Tutorial 1 — the four parts -->
     <section>
       <p class="eyebrow">Hands-on &gt; The tutorial</p>
       <h2>From MLPs to LISA: simulation-based inference, hands-on</h2>
       <p class="subtitle" style="margin-top:0;">
-        Five parts, ~115 minutes. Plain PyTorch &mdash; no SBI framework, no installs.
+        Four parts. Plain PyTorch &mdash; no SBI framework, no installs.
       </p>
 
       <div style="display:flex; gap:22px; margin-top:8px; align-items:flex-start;">
@@ -2558,17 +2558,17 @@
             </tr>
             <tr style="border-bottom:1px solid #e5e8ea;">
               <td style="padding:7px 8px; font-weight:600; color:#2980b9;">1</td>
-              <td style="padding:7px 8px;">a <strong>function</strong> &mdash; sine curve, then a harder shape</td>
+              <td style="padding:7px 8px;">a <strong>function</strong> &mdash; the frequency of a noisy sine</td>
               <td style="padding:7px 8px; color:#566069;">MLPs, gradient descent, overfitting, early stopping</td>
             </tr>
             <tr style="border-bottom:1px solid #e5e8ea; background:#eaf3fb;">
               <td style="padding:7px 8px; font-weight:600; color:#2980b9;">2</td>
-              <td style="padding:7px 8px;">a <strong>distribution</strong> &mdash; banana, spiral, rings</td>
+              <td style="padding:7px 8px;">a <strong>distribution</strong> &mdash; a spiral you can rotate and rescale</td>
               <td style="padding:7px 8px; color:#566069;"><strong>flow matching</strong>, conditioning</td>
             </tr>
             <tr style="border-bottom:1px solid #e5e8ea;">
               <td style="padding:7px 8px; font-weight:600; color:#2980b9;">3</td>
-              <td style="padding:7px 8px;">a <strong>posterior</strong> &mdash; feed FM pairs from a simulator</td>
+              <td style="padding:7px 8px;">a <strong>posterior</strong> &mdash; where did the ball come from?</td>
               <td style="padding:7px 8px; color:#566069;">SBI, amortization</td>
             </tr>
             <tr style="border-bottom:1px solid #e5e8ea;">
@@ -2577,18 +2577,19 @@
               <td style="padding:7px 8px; color:#566069;">data compression (PCA) + <strong>sequential</strong> zoom</td>
             </tr>
             <tr style="background:#fdf2e6; border-left:4px solid #e67e22;">
-              <td style="padding:7px 8px; font-weight:600; color:#e67e22;">5</td>
+              <td style="padding:7px 8px; font-weight:600; color:#e67e22;">&rarr;</td>
               <td style="padding:7px 8px;">a <strong>massive black-hole binary in LISA data</strong><br>
-                  <span style="color:#7f8c8d;">LDC1 &ldquo;Radler&rdquo;, 9 parameters, one day of data</span></td>
-              <td style="padding:7px 8px; color:#566069;">(pre-simulated training bank)</td>
+                  <span style="color:#7f8c8d;">LDC1 &ldquo;Radler&rdquo;, 9 parameters, waveforms simulated live</span></td>
+              <td style="padding:7px 8px; color:#566069;">the companion notebook</td>
             </tr>
           </table>
 
           <div class="box box-blue" style="margin-top:12px; font-size:0.74em;">
             <strong>The spine:</strong> the ten-line <code>fm_loss</code> and the small
             <code>VelocityNet</code> you write in Part&nbsp;2 are reused <em>literally unchanged</em> in
-            Parts&nbsp;3, 4 and 5. This is not magic infrastructure &mdash; it is a loss function and a
-            loop you fully understand, and it analyzes a gravitational wave.
+            Parts&nbsp;3 and 4, and again in the companion notebook. This is not magic
+            infrastructure &mdash; it is a loss function and a loop you fully understand, and it
+            analyzes a gravitational wave.
           </div>
         </div>
 
@@ -2598,7 +2599,7 @@
             <ol style="margin:6px 0 0; padding-left:1.15em;">
               <li>Open the notebook in Colab</li>
               <li>Runtime &rarr; Change runtime type &rarr; <strong>T4 GPU</strong></li>
-              <li>Run all cells top to bottom (~3&ndash;5 min)</li>
+              <li>Run all cells top to bottom</li>
             </ol>
             <p style="margin:7px 0 0; color:#7f8c8d;">Everything also runs on CPU, just slower.</p>
           </div>
@@ -2641,16 +2642,16 @@
 
         <div style="display:flex; align-items:center; gap:12px; background:#f7f9fa; border-radius:8px; padding:9px 14px;">
           <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#2980b9;">Part 2</div>
-          <div style="flex:1;">A Gaussian head is fast and exact &hellip;</div>
+          <div style="flex:1;">One error bar per network is easy &hellip;</div>
           <div style="flex:0 0 26px; color:#c0392b; font-size:1.2em; text-align:center;">&rarr;</div>
-          <div style="flex:1.25; color:#c0392b;">&hellip; and returns a diffuse blob for a curved posterior</div>
+          <div style="flex:1.25; color:#c0392b;">&hellip; but the real uncertainty depends on the data</div>
           <div style="flex:0 0 26px; color:#27ae60; font-size:1.2em; text-align:center;">&rarr;</div>
           <div style="flex:0.95; font-weight:600; color:#27ae60;">flow matching</div>
         </div>
 
         <div style="display:flex; align-items:center; gap:12px; background:#f7f9fa; border-radius:8px; padding:9px 14px;">
           <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#2980b9;">Part 3</div>
-          <div style="flex:1;">Simulate pairs, train, get a posterior &hellip;</div>
+          <div style="flex:1;">Simulate pairs, train, get a curved, bimodal posterior &hellip;</div>
           <div style="flex:0 0 26px; color:#c0392b; font-size:1.2em; text-align:center;">&rarr;</div>
           <div style="flex:1.25; color:#c0392b;">&hellip; but real data \(x\) has thousands of dimensions</div>
           <div style="flex:0 0 26px; color:#27ae60; font-size:1.2em; text-align:center;">&rarr;</div>
@@ -2661,16 +2662,16 @@
           <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#2980b9;">Part 4</div>
           <div style="flex:1;">Train from the wide prior &hellip;</div>
           <div style="flex:0 0 26px; color:#c0392b; font-size:1.2em; text-align:center;">&rarr;</div>
-          <div style="flex:1.25; color:#c0392b;">&hellip; <strong>10 of 4096</strong> simulations land near the posterior</div>
+          <div style="flex:1.25; color:#c0392b;">&hellip; <strong>23 of 32768</strong> simulations land near the posterior</div>
           <div style="flex:0 0 26px; color:#27ae60; font-size:1.2em; text-align:center;">&rarr;</div>
           <div style="flex:0.95; font-weight:600; color:#27ae60;">sequential zoom</div>
         </div>
 
         <div style="display:flex; align-items:center; gap:12px; background:#fdf2e6; border-radius:8px; padding:9px 14px;">
-          <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#e67e22;">Part 5</div>
+          <div style="flex:0 0 82px; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#e67e22;">Next</div>
           <div style="flex:1;">The same stack, on LDC1 Radler data &hellip;</div>
           <div style="flex:0 0 26px; color:#e67e22; font-size:1.2em; text-align:center;">&rarr;</div>
-          <div style="flex:2.4; font-weight:600; color:#e67e22;">&hellip; masses to five digits, and the distance&ndash;inclination caustic</div>
+          <div style="flex:2.4; font-weight:600; color:#e67e22;">&hellip; 9 parameters, live waveforms, and the distance&ndash;inclination degeneracy</div>
         </div>
       </div>
 
