@@ -905,63 +905,60 @@ study_conditional(my_target, requests=[0.0, 0.25, 0.5, 1.4])
 
 G = 9.81
 SIGMA_X = 0.4                                  # measurement error on the range [m]
-THETA_LO = torch.tensor([8.0, 0.15], device=dev)             # v [m/s], alpha [rad]
-THETA_HI = torch.tensor([12.0, np.pi / 2 - 0.15], device=dev)
+V_LO, V_HI = 8.0, 12.0                         # the prior box: v [m/s] ...
+A_LO, A_HI = 0.15, np.pi / 2 - 0.15            # ... and alpha [rad]
 
 
-def sample_theta(n):
-    """The prior: n draws of theta = (v, alpha), uniform in the box -> (n, 2)."""
-    return THETA_LO + (THETA_HI - THETA_LO) * torch.rand(n, 2, device=dev)
+def ball_prior():
+    """One draw of theta = (v, alpha), uniform in the box."""
+    return [np.random.uniform(V_LO, V_HI), np.random.uniform(A_LO, A_HI)]
 
 
-def sample_x(theta, n_throws=1):
-    """The simulator: theta (n, 2) -> the measured landing position (n, 1).
+def ball_sim(theta, n_throws=1):
+    """One draw of x = (range,), given theta = (v, alpha).
 
     Averaging n_throws repeats of the same throw shrinks the measurement error
     to sigma / sqrt(n_throws); the physics itself is the single line for r.
     """
-    v, alpha = theta[:, :1], theta[:, 1:2]
-    r = v ** 2 / G * torch.sin(2 * alpha)                    # where it lands
-    eps = torch.randn(len(theta), n_throws, device=theta.device)
-    return r + SIGMA_X * eps.mean(1, keepdim=True)
+    v, alpha = theta
+    r = v ** 2 / G * np.sin(2 * alpha)                       # where it lands
+    return [r + SIGMA_X * np.random.randn() / np.sqrt(n_throws)]
 
 
 def ball_path(theta, n=200):
-    """The flight path, for the picture only: theta (m, 2) -> (m, n, 2) of (x, y)."""
-    v, alpha = theta[:, :1], theta[:, 1:2]
-    t = torch.linspace(0, 1, n, device=theta.device) * 2 * v * alpha.sin() / G
-    return torch.stack([v * alpha.cos() * t,
-                        v * alpha.sin() * t - 0.5 * G * t ** 2], -1)
+    """The flight path, for the picture only: theta -> (n, 2) of (x, y)."""
+    v, alpha = theta
+    t = np.linspace(0, 1, n) * 2 * v * np.sin(alpha) / G
+    return np.stack([v * np.cos(alpha) * t,
+                     v * np.sin(alpha) * t - 0.5 * G * t ** 2], -1)
 
 
 def ridge(x_obs, v):
     """The degeneracy: the angles that land a ball of speed v at range x_obs."""
     s = G * x_obs / v ** 2                     # = sin(2 alpha); > 1 is unreachable
-    a = 0.5 * torch.asin(s.masked_fill(s > 1, float('nan')))
+    a = 0.5 * np.arcsin(np.where(s > 1, np.nan, s))
     return a, np.pi / 2 - a                    # the line drive and the lob
 
 
 def plot_ridge(ax, x_obs, label=None):
     """Draw that curve on a (v, alpha) plane, and set up the axes."""
-    v = torch.linspace(THETA_LO[0], THETA_HI[0], 200, device=dev)
+    v = np.linspace(V_LO, V_HI, 200)
     for i, a in enumerate(ridge(x_obs, v)):
-        ax.plot(v.cpu(), a.rad2deg().cpu(), 'k--', lw=1,
-                label=label if i == 0 else None)
-    ax.set(xlabel='v [m/s]', ylabel=r'$\alpha$ [deg]',
-           xlim=(8, 12), ylim=(np.degrees(0.15), 90 - np.degrees(0.15)))
+        ax.plot(v, np.degrees(a), 'k--', lw=1, label=label if i == 0 else None)
+    ax.set(xlabel='v [m/s]', ylabel=r'$\alpha$ [deg]', xlim=(V_LO, V_HI),
+           ylim=(np.degrees(A_LO), np.degrees(A_HI)))
 
 
-THETA_BALL = torch.tensor([[10.4, 0.62]], device=dev)   # v = 10.4 m/s, alpha = 36 deg
-THETA_BALL_TWIN = torch.tensor([[10.4, np.pi / 2 - 0.62]], device=dev)  # the 54 deg lob
-paths = ball_path(torch.cat([THETA_BALL, THETA_BALL_TWIN])).cpu()
+THETA_BALL = [10.4, 0.62]                       # v = 10.4 m/s, alpha = 36 deg
+THETA_BALL_TWIN = [10.4, np.pi / 2 - 0.62]      # the 54 deg lob that lands there too
 
 fig, ax = plt.subplots(figsize=(6.5, 3.0))
-for p, th, c in zip(paths, torch.cat([THETA_BALL, THETA_BALL_TWIN]).cpu(),
-                    ['C0', 'C3']):
+for th, c in zip([THETA_BALL, THETA_BALL_TWIN], ['C0', 'C3']):
+    p = ball_path(th)
     ax.plot(p[:, 0], p[:, 1], c, lw=1.5,
             label=fr'$v$ = {th[0]:.1f} m/s, '
-                  fr'$\alpha$ = {th[1].rad2deg():.0f}$^\circ$')
-ax.axvline(paths[0, -1, 0].item(), color='k', ls=':', lw=1)
+                  fr'$\alpha$ = {np.degrees(th[1]):.0f}$^\circ$')
+ax.axvline(ball_path(THETA_BALL)[-1, 0], color='k', ls=':', lw=1)
 ax.set(xlabel='distance [m]', ylabel='height [m]', ylim=(0, None))
 ax.legend(fontsize=8, title='same landing point', title_fontsize=8)
 fig.tight_layout()
@@ -972,7 +969,15 @@ fig.tight_layout()
 #
 # `VelocityNet`, `fm_loss`, `train_fm` and `fm_sample` are the Part 2
 # functions, untouched. The only difference is that `cond` is now the output of
-# a simulator.
+# a simulator, so two short wrappers are all we add:
+#
+# - `train_sbi(prior, simulator)` simulates a training set and fits
+#   $q_\phi(\theta \,|\, x)$, returning the trained network;
+# - `sample_posterior(net, x_obs)` draws from that network for one observation.
+#
+# You supply the *prior* and the *simulator*, one draw at a time and in plain
+# numpy — exactly like `my_target` in Part 2. Everything else, including the
+# dimensions of $\theta$ and $x$, is worked out from what they return.
 #
 # We do it twice: once with a **single** throw, and once with the mean of
 # **twenty** throws (which shrinks the noise on the measurement to
@@ -980,37 +985,70 @@ fig.tight_layout()
 
 # %%
 
-def run_ball_sbi(n_throws, n_train=40000, steps=3000, theta_true=THETA_BALL):
-    """Simulate a training set, fit q(theta | x), return posterior samples."""
-    theta = sample_theta(n_train)                     # theta_i ~ prior
-    x = sample_x(theta, n_throws)                     # x_i ~ p(x | theta_i)
-    tmu, tsd = theta.mean(0), theta.std(0)
-    xmu, xsd = x.mean(0), x.std(0)
+def train_sbi(prior, simulator, n_sim=40000, steps=3000, hidden=128, layers=3):
+    """Fit q(theta | x) from a prior and a simulator; return the trained net.
 
-    net = VelocityNet(2, d_cond=1).to(dev)            # w = theta (2), cond = x (1)
-    # z-score both sides -- subtract the mean, divide by the standard deviation
-    # -- so the network sees O(1) numbers, exactly as in Part 1
-    train_fm(net, (theta - tmu) / tsd, (x - xmu) / xsd, steps=steps)
+        prior()          -> one theta vector (any array-like of length d_theta)
+        simulator(theta) -> one x vector     (any array-like of length d_x)
 
-    x_obs = sample_x(theta_true, n_throws)            # our observation
-    so = ((x_obs - xmu) / xsd).expand(6000, 1)
-    post = fm_sample(net, so, 2) * tsd + tmu          # undo the z-score
-    return post.cpu(), x_obs.item()
+    Both are plain Python/numpy: no tensors, no batching, no device. We call
+    them once per example in a loop, which costs a second or two for the
+    default 40000 pairs and is nothing next to the training that follows.
+    """
+    theta_np = np.stack([np.asarray(prior(), dtype=float) for _ in range(n_sim)])
+    x_np = np.stack([np.asarray(simulator(th), dtype=float) for th in theta_np])
+    theta = torch.tensor(theta_np, dtype=torch.float32, device=dev)  # (n, d_theta)
+    x = torch.tensor(x_np, dtype=torch.float32, device=dev)          # (n, d_x)
+    print(f'  {n_sim} pairs simulated: theta is {theta.shape[1]}-D, '
+          f'x is {x.shape[1]}-D')
+
+    net = VelocityNet(theta.shape[1], x.shape[1], hidden, layers).to(dev)
+    # The z-scoring constants are part of the trained model, so keep them ON the
+    # net: registered buffers travel with .to(dev) and with state_dict(), and
+    # sample_posterior can then undo the scaling without being handed anything.
+    net.register_buffer('t_mu', theta.mean(0)); net.register_buffer('t_sd', theta.std(0))
+    net.register_buffer('x_mu', x.mean(0)); net.register_buffer('x_sd', x.std(0))
+
+    train_fm(net, (theta - net.t_mu) / net.t_sd,      # z-score both sides, so
+             (x - net.x_mu) / net.x_sd, steps=steps)  # the net sees O(1) numbers
+    return net
 
 
-print('one throw:')
-post_1, x_obs_1 = run_ball_sbi(n_throws=1)
-print('twenty throws:')
-post_20, x_obs_20 = run_ball_sbi(n_throws=20)
+def sample_posterior(net, x_obs, n_samples=6000):
+    """Draw from q(theta | x_obs) -> (n_samples, d_theta) numpy array."""
+    xo = torch.tensor(np.asarray(x_obs, dtype=float), dtype=torch.float32, device=dev)
+    cond = ((xo - net.x_mu) / net.x_sd).expand(n_samples, len(net.x_mu))
+    theta = fm_sample(net, cond, len(net.t_mu)) * net.t_sd + net.t_mu  # un-z-score
+    return theta.cpu().numpy()
+
+
+def plot_ball_posterior(ax, post, x_obs, truth=None, title=None,
+                        ridge_label=None, post_label=None):
+    """Posterior scatter on the (v, alpha) plane, over the degeneracy curve."""
+    plot_ridge(ax, np.asarray(x_obs, dtype=float)[0], label=ridge_label)
+    ax.plot(post[:, 0], np.degrees(post[:, 1]), 'C0.', ms=1.5, alpha=.25,
+            label=post_label)
+    if truth is not None:
+        ax.plot(truth[0], np.degrees(truth[1]), 'r*', ms=15)
+    if title:
+        ax.set_title(title)
 
 # %%
 
+print('one throw:')
+net_1 = train_sbi(ball_prior, ball_sim)
+print('twenty throws:')
+net_20 = train_sbi(ball_prior, lambda th: ball_sim(th, n_throws=20))
+
+# %%
+
+x_obs_1 = ball_sim(THETA_BALL)                        # our observation ...
+x_obs_20 = ball_sim(THETA_BALL, n_throws=20)          # ... and a better one
+
 fig, ax = plt.subplots(1, 2, figsize=(11, 4.6), sharey=True)
-for a, post, xo, nt in [(ax[0], post_1, x_obs_1, 1), (ax[1], post_20, x_obs_20, 20)]:
-    plot_ridge(a, xo)
-    a.plot(post[:, 0], post[:, 1].rad2deg(), 'C0.', ms=1.5, alpha=.25)
-    a.plot(THETA_BALL[0, 0].cpu(), THETA_BALL[0, 1].rad2deg().cpu(), 'r*', ms=15)
-    a.set_title(f'{nt} throw{"s" if nt > 1 else ""}:  x = {xo:.2f} m')
+for a, net, xo, nt in [(ax[0], net_1, x_obs_1, 1), (ax[1], net_20, x_obs_20, 20)]:
+    plot_ball_posterior(a, sample_posterior(net, xo), xo, truth=THETA_BALL,
+                        title=f'{nt} throw{"s" if nt > 1 else ""}:  x = {xo[0]:.2f} m')
 ax[1].set_ylabel('')
 fig.tight_layout()
 
@@ -1029,14 +1067,15 @@ fig.tight_layout()
 # thinner. But they do not merge, and the second mode does not go away.
 #
 # **Exercise 3.**
-# 1. **Amortization.** The trained network covers *every* $x$, not just ours.
-#    Use `run_ball_sbi` to get a network, then sample the posterior for two or
-#    three different observed ranges without retraining — try a near-maximal
-#    range ($x \approx v^2/g \approx 11$ m). What happens to the two modes as
-#    the range approaches the largest achievable one?
-# 2. **Break the degeneracy.** Change `sample_x` to return *two* numbers, the
-#    range **and** the time of flight $2 v \sin\alpha / g$, and set
-#    `d_cond = 2`. What happens to the second mode? Why?
+# 1. **Amortization.** `net_1` already covers *every* $x$, not just ours. Call
+#    `sample_posterior(net_1, [x])` for two or three different observed ranges,
+#    with no retraining — try a near-maximal range
+#    ($x \approx v^2/g \approx 11$ m). What happens to the two modes as the
+#    range approaches the largest achievable one?
+# 2. **Break the degeneracy.** Write a simulator that returns *two* numbers, the
+#    range **and** the time of flight $2 v \sin\alpha / g$, and hand it to
+#    `train_sbi` — the extra dimension is picked up on its own. What happens to
+#    the second mode? Why?
 
 # %%
 
@@ -1046,56 +1085,36 @@ fig.tight_layout()
 # %%
 
 # @title Reference solution { display-mode: "form" }
-# 1: amortization over the observed range, in one trained network.
-theta_b = sample_theta(40000)
-x_b = sample_x(theta_b, 1)
-tmu_b, tsd_b = theta_b.mean(0), theta_b.std(0)
-xmu_b, xsd_b = x_b.mean(0), x_b.std(0)
-net_b = VelocityNet(2, d_cond=1).to(dev)
-train_fm(net_b, (theta_b - tmu_b) / tsd_b, (x_b - xmu_b) / xsd_b, log=False)
-
+# 1: amortization -- the SAME network, three observations, no retraining.
 fig, ax = plt.subplots(1, 3, figsize=(14, 4.4), sharey=True)
-for a, xo in zip(ax, [6.0, 9.5, 11.5]):
-    xt = torch.tensor([[xo]], device=dev)
-    post = (fm_sample(net_b, ((xt - xmu_b) / xsd_b).expand(6000, 1), 2)
-            * tsd_b + tmu_b).cpu()
-    plot_ridge(a, xo)
-    a.plot(post[:, 0], post[:, 1].rad2deg(), 'C0.', ms=1.5, alpha=.25)
-    a.set_title(f'x = {xo} m')
+for a, xo in zip(ax, [[6.0], [9.5], [11.5]]):
+    plot_ball_posterior(a, sample_posterior(net_1, xo), xo, title=f'x = {xo[0]} m')
 for a in ax[1:]:
     a.set_ylabel('')
 fig.tight_layout()
 
-# 2: adding the time of flight kills the second mode.
-def sample_x2(theta, n_throws=1):
-    """Range AND time of flight -> (n, 2)."""
-    v, alpha = theta[:, 0], theta[:, 1]
-    m = torch.stack([v ** 2 / G * torch.sin(2 * alpha),      # range
-                     2 * v * torch.sin(alpha) / G], 1)       # time of flight
-    sd = torch.tensor([SIGMA_X, 0.02], device=theta.device)  # per-channel noise
-    return m + sd * torch.randn(len(theta), 2, device=theta.device) / np.sqrt(n_throws)
+# %%
+
+# 2: adding the time of flight kills the second mode. Only the simulator changes.
+def ball_sim2(theta):
+    """Range AND time of flight -> x has two components now."""
+    v, alpha = theta
+    return [v ** 2 / G * np.sin(2 * alpha) + SIGMA_X * np.random.randn(),
+            2 * v * np.sin(alpha) / G + 0.02 * np.random.randn()]
 
 
-x_b2 = sample_x2(theta_b, 1)
-x2mu, x2sd = x_b2.mean(0), x_b2.std(0)
-net_b2 = VelocityNet(2, d_cond=2).to(dev)
-train_fm(net_b2, (theta_b - tmu_b) / tsd_b, (x_b2 - x2mu) / x2sd,
-         steps=6000, log=False)          # this posterior is small: train longer
-
-x_obs2 = sample_x2(THETA_BALL, 1)
-post2 = (fm_sample(net_b2, ((x_obs2 - x2mu) / x2sd).expand(6000, 2), 2)
-         * tsd_b + tmu_b).cpu()
+net_2obs = train_sbi(ball_prior, ball_sim2, steps=6000)   # small posterior: train longer
+x_obs2 = ball_sim2(THETA_BALL)
+post2 = sample_posterior(net_2obs, x_obs2)
 
 fig, ax = plt.subplots(figsize=(5.8, 4.6))
-plot_ridge(ax, x_obs2[0, 0].item(), label='range alone')
+plot_ball_posterior(ax, post2, x_obs2, truth=THETA_BALL, ridge_label='range alone',
+                    post_label='posterior from both')
 # the other observable has its own degeneracy: T = 2 v sin(alpha) / g = const
-vv = torch.linspace(THETA_LO[0], THETA_HI[0], 200, device=dev)
-sa = G * x_obs2[0, 1] / (2 * vv)                          # = sin(alpha)
-ax.plot(vv.cpu(), torch.asin(sa.masked_fill(sa > 1, float('nan'))).rad2deg().cpu(),
-        'k:', lw=1.4, label='time of flight alone')
-ax.plot(post2[:, 0], post2[:, 1].rad2deg(), 'C2.', ms=1.5, alpha=.25,
-        label='posterior from both')
-ax.plot(THETA_BALL[0, 0].cpu(), THETA_BALL[0, 1].rad2deg().cpu(), 'r*', ms=15)
+vv = np.linspace(V_LO, V_HI, 200)
+sa = G * x_obs2[1] / (2 * vv)                             # = sin(alpha)
+ax.plot(vv, np.degrees(np.arcsin(np.where(sa > 1, np.nan, sa))), 'k:', lw=1.4,
+        label='time of flight alone')
 ax.legend(fontsize=8, markerscale=6, loc='upper right')
 ax.set_title('two observables: the posterior sits where the curves cross')
 fig.tight_layout()
