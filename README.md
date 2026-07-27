@@ -2,7 +2,7 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/tutorial_lisa_sbi.ipynb) &nbsp;**the tutorial**
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_sequential_new.ipynb) &nbsp;**the sequential zoom on the MBHB**, with waveforms simulated live
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_mbhb_first_steps.ipynb) &nbsp;**the sequential zoom on the MBHB**, with waveforms simulated live
 
 **[Intro slides](https://cweniger.github.io/teaching-2607-LISA-Hackathon/)** —
 the 30-minute concept lecture given before the tutorial: the science case,
@@ -31,7 +31,7 @@ exercises are knob-turning experiments on top.
 
 The tutorial needs no external data at all — every simulator in it is a few
 lines of torch. For the real LISA problem, continue with
-`lisa_sequential_new.ipynb`, which installs the lisabeta waveform stack from
+`lisa_mbhb_first_steps.ipynb`, which installs the lisabeta waveform stack from
 PyPI (~20 s on Colab) and simulates live.
 
 ## Files
@@ -40,7 +40,7 @@ PyPI (~20 s on Colab) and simulates live.
 |---|---|
 | `tutorial_lisa_sbi.ipynb` | the tutorial (open this) |
 | `lisa_sims.ipynb` | companion: pip-install lisabeta, simulate LISA data live |
-| `lisa_sequential_new.ipynb` | **companion:** the sequential zoom on the MBHB, live sims — bare bones (latent-space flows, prior in the proposal mixture, importance-weighted readout, no Procrustes/PSIS/EMA) |
+| `lisa_mbhb_first_steps.ipynb` | **companion:** the sequential zoom on the MBHB, live sims — bare bones (latent-space flows, prior in the proposal mixture, importance-weighted readout, no Procrustes/PSIS/EMA) |
 | `*_src.py` | notebook sources (jupytext percent format) |
 | `build_notebook.py` | `*_src.py` → `.ipynb` converter |
 | `make_tutorial_simbank.py` | regenerates `mbhb_simbank.npz` (no longer used by the tutorial) |
@@ -49,7 +49,7 @@ PyPI (~20 s on Colab) and simulates live.
 
 The companion notebooks need no pre-simulated data: they install the lisabeta
 waveform stack from PyPI wheels (~20 s on Colab) and simulate everything live
-— `lisa_sequential_new.ipynb` runs the actual dynamic-SBI loop (4 rounds,
+— `lisa_mbhb_first_steps.ipynb` runs the actual dynamic-SBI loop (4 rounds,
 ~2000 live simulations per round) on the 9-parameter MBHB problem.
 
 `make_tutorial_simbank.py` requires the LISA waveform stack (lisabeta +

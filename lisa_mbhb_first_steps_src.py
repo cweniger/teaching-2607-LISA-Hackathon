@@ -1,11 +1,11 @@
 # %% [markdown]
 # # Sequential SBI on LISA data — the zoom, live (bare-bones version)
 #
-# [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_sequential_new.ipynb)
+# [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cweniger/teaching-2607-LISA-Hackathon/blob/main/lisa_mbhb_first_steps.ipynb)
 #
 # The real dynamic-SBI loop on the 9-parameter LDC1-1 massive black-hole
 # binary, with waveforms simulated live, round by round. This is the stripped
-# version of the production pipeline: **no** Procrustes basis stabilisation,
+# version of the production pipeline (Lyu et al, 2026, in preparation): **no** Procrustes basis stabilisation,
 # **no** Pareto-smoothed importance sampling, **no** late-time noise schedule,
 # **no** EMA. The networks *are* warm-started — they keep learning across
 # rounds, as in production.
