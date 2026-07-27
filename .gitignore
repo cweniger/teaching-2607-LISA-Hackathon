@@ -1,6 +1,4 @@
 # Regenerable data / figures -- not committed.
-#   mbhb_simbank.npz -> python make_tutorial_simbank.py (needs the
-#   dsbi-ldc-mbhb repo + LISA waveform stack; see README)
 *.npz
 *.png
 __pycache__/

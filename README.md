@@ -39,23 +39,16 @@ PyPI (~20 s on Colab) and simulates live.
 | file | role |
 |---|---|
 | `tutorial_lisa_sbi.ipynb` | the tutorial (open this) |
-| `lisa_sims.ipynb` | companion: pip-install lisabeta, simulate LISA data live |
 | `lisa_mbhb_first_steps.ipynb` | **companion:** the sequential zoom on the MBHB, live sims — bare bones (latent-space flows, prior in the proposal mixture, importance-weighted readout, no Procrustes/PSIS/EMA) |
 | `*_src.py` | notebook sources (jupytext percent format) |
 | `build_notebook.py` | `*_src.py` → `.ipynb` converter |
-| `make_tutorial_simbank.py` | regenerates `mbhb_simbank.npz` (no longer used by the tutorial) |
-| `DESIGN_NOTES.md` | why the tutorial is built this way |
+| `production_posterior.npy` | reference posterior the companion notebook overlays on its own |
 | `docs/` | the intro slide deck, served by GitHub Pages (reveal.js) |
 
-The companion notebooks need no pre-simulated data: they install the lisabeta
-waveform stack from PyPI wheels (~20 s on Colab) and simulate everything live
-— `lisa_mbhb_first_steps.ipynb` runs the actual dynamic-SBI loop (4 rounds,
-~2000 live simulations per round) on the 9-parameter MBHB problem.
-
-`make_tutorial_simbank.py` requires the LISA waveform stack (lisabeta +
-lisa-data-challenge) and the analysis repository
-[dsbi-ldc-mbhb](https://github.com/lvhf123/dsbi-ldc-mbhb) — see
-`standalone_tests/INSTALL.md` there. The notebook itself needs none of that.
+The companion notebook needs no pre-simulated data either: it installs the
+lisabeta waveform stack from PyPI wheels (~20 s on Colab) and simulates
+everything live, running the actual dynamic-SBI loop (4 rounds, ~2000 live
+simulations per round) on the 9-parameter MBHB problem.
 
 ## Background
 
