@@ -79,10 +79,20 @@ print(f'device: {dev}' + ('' if dev == 'cuda' else '  (enable a GPU runtime for 
 # %%
 
 class MLP(nn.Module):
-    """A dense feed-forward network from R^d_in to R^d_out."""
+    """A dense feed-forward network: x (n, d_in) -> y_hat (n, d_out).
+
+    Three hidden layers of width `hidden`, each followed componentwise by the
+    nonlinearity `act`. The read-out is affine, with no `act`, so y_hat can
+    take any value.
+
+    Arguments:
+      d_in: number of input features per point.
+      d_out: number of output values per point.
+      hidden: width of each of the three hidden layers.
+      act: the nonlinearity, e.g. torch.relu or torch.selu.
+    """
 
     def __init__(self, d_in=1, d_out=1, hidden=256, act=torch.relu):
-        """Three hidden layers of width `hidden`, nonlinearity `act`."""
         super().__init__()
         self.act = act                             # torch.relu, torch.selu, ...
         self.fc1 = nn.Linear(d_in, hidden)         # W1: (hidden, d_in)
@@ -90,9 +100,7 @@ class MLP(nn.Module):
         self.fc3 = nn.Linear(hidden, hidden)       # W3: (hidden, hidden)
         self.out = nn.Linear(hidden, d_out)        # W4: (d_out, hidden)
 
-    def forward(self, x):
-        """Run the chain of affine maps and nonlinearities: (n, d_in) -> (n, d_out)."""
-        # x: (n, d_in) — n points, d_in features each
+    def forward(self, x):           # x: (n, d_in) — n points, d_in features each
         h = self.act(self.fc1(x))   # W1 @ x + b1, then g   -> (n, hidden)
         h = self.act(self.fc2(h))   # W2 @ h + b2, then g   -> (n, hidden)
         h = self.act(self.fc3(h))   # W3 @ h + b3, then g   -> (n, hidden)
@@ -207,7 +215,20 @@ def fit(net, x, y, x_val, y_val, lr=1e-4, patience=300, epochs=100_000,
 
     The NLL is minus the log probability the model assigns to the data, using
     sigma^2 = mean squared TRAINING residual. Lower is better; it can go
-    negative. Early stopping keeps the parameters from the best validation epoch.
+    negative.
+
+    Arguments:
+      net: the network to train, modified in place.
+      x, y: training inputs (n, d_in) and targets (n, d_out).
+      x_val, y_val: held-out inputs and targets, used only for monitoring.
+      lr: Adam learning rate.
+      patience: stop after this many epochs with no new best validation NLL.
+      epochs: hard cap, normally never reached because patience fires first.
+      rewind: keep the best epoch's weights (True) or the last epoch's (False).
+
+    Returns:
+      (hist, best_ep): the per-epoch table of (training NLL, validation NLL,
+      sigma) as an array, and the index of the epoch whose weights we kept.
     """
     opt = torch.optim.Adam(net.parameters(), lr=lr)   # holds pointers to phi
     hist, best, best_ep, snap = [], np.inf, 0, None
@@ -274,13 +295,21 @@ SPAN = NU_HI - NU_LO
 
 
 def sine_data(n, sigma=0.3, seed=0, random_phase=False, nu_hi=NU_HI):
-    """n examples: x (n, 30) noisy samples, and the target frequency (n, 1).
+    """Simulate noisy samples of a sine, and the frequency to recover from them.
 
-    Data normalisation: the inputs x are O(1) by construction, and the target
-    is returned *rescaled* to [0, 1] as (nu - NU_LO) / span rather than in
-    cycles -- networks train much better when inputs and targets are O(1) and
-    the initial weights therefore produce outputs of roughly the right size.
-    Multiply by span (and add NU_LO) to read anything back in cycles.
+    Arguments:
+      n: how many examples to draw.
+      sigma: standard deviation of the noise added to each sample.
+      seed: torch seed, so the training and held-out sets can differ.
+      random_phase: give each example a uniform random phase instead of zero.
+      nu_hi: top of the frequency band; the bottom is always NU_LO.
+
+    Returns:
+      (x, nu): the noisy samples x (n, 30), and the target frequency (n, 1)
+      *rescaled* to [0, 1] as (nu - NU_LO) / span rather than left in cycles.
+      Networks train much better when inputs and targets are O(1), so that the
+      initial weights produce outputs of roughly the right size; multiply by
+      span and add NU_LO to read anything back in cycles.
     """
     torch.manual_seed(seed)
     span = nu_hi - NU_LO
@@ -309,10 +338,17 @@ fig.tight_layout()
 def evaluate(net, hist, best_ep, x_val, nu_val, nu_hi=NU_HI):
     """Read a finished fit out in cycles, undoing the [0, 1] target rescaling.
 
-    Returns (nu_true, nu_est, rmse, sigma_hat) for the held-out set, where
-    rmse is the estimator's *real* scatter and sigma_hat is the error bar the
-    model *claims* -- one number for every input, taken from the plug-in
-    sigma^2 (the mean squared training residual) at the epoch we kept.
+    Arguments:
+      net: the trained network.
+      hist, best_ep: the two values returned by fit().
+      x_val, nu_val: the held-out set to evaluate on.
+      nu_hi: top of the frequency band the fit used.
+
+    Returns:
+      (nu_true, nu_est, rmse, sigma_hat), all in cycles. rmse is the
+      estimator's *real* scatter on held-out data; sigma_hat is the error bar
+      the model *claims* -- one number for every input, taken from the plug-in
+      sigma^2 (the mean squared training residual) at the epoch we kept.
     """
     span = nu_hi - NU_LO
     sigma_hat = hist[best_ep, 2] * span                        # claimed, in cycles
@@ -324,8 +360,18 @@ def evaluate(net, hist, best_ep, x_val, nu_val, nu_hi=NU_HI):
 
 
 def plot_fit(hist, best_ep, nu_true, nu_est, sigma_hat, nu_hi=NU_HI, label=None):
-    """Left: estimate against truth, with the band the model claims.
-    Right: the two negative log-likelihood curves and the epoch we kept."""
+    """Draw the standard two-panel summary of a finished fit.
+
+    Left: estimate against truth, with the band the model claims. Right: the
+    two negative log-likelihood curves and the epoch we kept.
+
+    Arguments:
+      hist, best_ep: the two values returned by fit().
+      nu_true, nu_est: truth and estimate in cycles, from evaluate().
+      sigma_hat: the error bar the model claims, in cycles, from evaluate().
+      nu_hi: top of the frequency band, for the axis limits.
+      label: optional figure title.
+    """
     rmse = (nu_est - nu_true).pow(2).mean().sqrt()
     fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.2))
     ax[0].fill_between([NU_LO, nu_hi], [NU_LO - sigma_hat, nu_hi - sigma_hat],
@@ -419,16 +465,28 @@ def experiment(n_train=300, width=256, patience=300, sigma=0.3,
                label=None):
     """Re-run the whole frequency fit with one setting changed, and plot it.
 
-    Draws a fresh training set of n_train examples and the usual 2000-example
-    held-out set (a different seed, so it is genuinely unseen), builds an MLP of
-    the given width, fits it with early stopping, then draws the same two panels
-    as above and prints the two numbers to compare:
+    Draws a fresh training set and the usual 2000-example held-out set (a
+    different seed, so it is genuinely unseen), builds an MLP of the given
+    width, fits it with early stopping, then draws the same two panels as above.
 
-      RMSE       the real scatter of the estimate on held-out data, in cycles
-      sigma_hat  the single error bar the model claims, also in cycles
+    Arguments:
+      n_train: size of the training set.
+      width: hidden width of the MLP.
+      patience: passed to fit(); since we always rewind to the best epoch,
+        raising it only burns compute.
+      sigma: noise level in the simulated data.
+      nu_hi: top of the frequency band.
+      random_phase: randomize the phase, so the network has to become
+        phase-invariant on its own.
+      rewind: keep the best epoch (True) or the last one (False).
+      plot: draw the two panels, or only print the numbers.
+      label: optional figure title.
 
-    Their ratio is how honest the fit is: 1.0 would be perfectly calibrated,
-    larger means over-confident. Returns (rmse, sigma_hat).
+    Returns:
+      (rmse, sigma_hat) in cycles: the real scatter of the estimate on held-out
+      data, and the single error bar the model claims. Their ratio is how
+      honest the fit is -- 1.0 would be perfectly calibrated, larger means
+      over-confident.
     """
     xt, nt = sine_data(n_train, sigma, seed=0, random_phase=random_phase,
                        nu_hi=nu_hi)                # nu_hi is passed through, so
@@ -598,7 +656,15 @@ for name, (r, sg) in freq_results.items():
 # %%
 
 def target_spiral(phase, scale):
-    """Samples on a rotated, scaled spiral. phase, scale: (n, 1) -> (n, 2)."""
+    """Draw samples on a rotated, scaled spiral.
+
+    Arguments:
+      phase: the rotation angle (n, 1).
+      scale: the radial scale (n, 1).
+
+    Returns:
+      Samples (n, 2), with a little Gaussian thickness added to the arm.
+    """
     a = 3 * np.pi * torch.rand_like(phase).sqrt()     # angle along the arm
     r = 0.45 * a * scale                              # radius grows with angle
     ang = a + phase                                   # the rotation
@@ -607,11 +673,20 @@ def target_spiral(phase, scale):
 
 
 def encode(phase, scale):
-    """Conditioning vector: (cos phase, sin phase, scale) -> (n, 3)."""
-    # the phase goes in as cos/sin rather than as the angle itself, so that
-    # phase 0 and phase 2*pi are literally the same input; feeding the raw angle
-    # would ask the network to learn that the ends of its input range coincide,
-    # and would leave a visible seam there
+    """Build the conditioning vector for the spiral.
+
+    The phase goes in as cos/sin rather than as the angle itself, so that phase
+    0 and phase 2*pi are literally the same input; feeding the raw angle would
+    ask the network to learn that the ends of its input range coincide, and
+    would leave a visible seam there.
+
+    Arguments:
+      phase: the rotation angle (n, 1).
+      scale: the radial scale (n, 1).
+
+    Returns:
+      (cos phase, sin phase, scale) stacked into (n, 3).
+    """
     return torch.cat([phase.cos(), phase.sin(), scale], 1)
 
 
@@ -648,6 +723,14 @@ def mlp(d_in, d_out, hidden, layers):
 
     The same idea as Part 1's MLP class, but with the input/output dimensions
     and the depth configurable rather than fixed at three hidden layers.
+
+    Arguments:
+      d_in, d_out: input and output dimensions.
+      hidden: width of every hidden layer.
+      layers: how many hidden blocks (Linear + ReLU) to stack.
+
+    Returns:
+      An nn.Sequential ending in an affine read-out with no nonlinearity.
     """
     mods, d = [], d_in                              # mods: the layer list so far
     for _ in range(layers):                         # one hidden block per layer
@@ -657,7 +740,16 @@ def mlp(d_in, d_out, hidden, layers):
 
 
 def fm_loss(net, th1, cond):
-    """Equation 1: the flow-matching objective. Reused in Parts 3 and 4."""
+    """Equation 1: the flow-matching objective. Reused in Parts 3 and 4.
+
+    Arguments:
+      net: the velocity field being trained.
+      th1: the data points theta_1 (n, d_theta).
+      cond: what they are conditioned on (n, d_cond).
+
+    Returns:
+      One scalar loss, ready to call .backward() on.
+    """
     th0 = torch.randn_like(th1)                     # theta_0 ~ N(0, I): noise point
     t = torch.rand(len(th1), 1, device=th1.device)   # t ~ U(0, 1), one per example
     tht = (1 - t) * th0 + t * th1                   # theta_t on the straight line
@@ -666,17 +758,25 @@ def fm_loss(net, th1, cond):
 
 
 class VelocityNet(nn.Module):
-    """Velocity field v(theta, t | cond): an MLP with a Fourier embedding of t."""
+    """Velocity field v(theta, t | cond): an MLP with a Fourier embedding of t.
+
+    Calling it maps th (n, d_theta), t (n, 1) and cond (n, d_cond) to a
+    velocity (n, d_theta).
+
+    Arguments:
+      d_theta: dimension of theta, and so of the velocity.
+      d_cond: how many numbers we condition on.
+      hidden: width of every hidden layer.
+      layers: how many hidden blocks to stack.
+    """
 
     def __init__(self, d_theta, d_cond, hidden=128, layers=3):
-        """A velocity field on R^d_theta, conditioned on d_cond extra numbers."""
         super().__init__()
         self.freqs = torch.tensor([1., 2., 4., 8.])           # time-embedding freqs
         # inputs: theta (d_theta) + time embedding (9) + conditioning (d_cond)
         self.net = mlp(d_theta + 9 + d_cond, d_theta, hidden, layers)
 
     def forward(self, th, t, cond):
-        """th (n, d_theta), t (n, 1), cond (n, d_cond) -> velocity (n, d_theta)."""
         ft = 2 * np.pi * t * self.freqs.to(t.device)          # (n, 4) scaled times
         temb = torch.cat([t, ft.sin(), ft.cos()], 1)          # (n, 9): t and 4 sin/cos
         # a raw scalar t is hard for an MLP to resolve finely; sin/cos of several
@@ -686,7 +786,17 @@ class VelocityNet(nn.Module):
 
 @torch.no_grad()                                    # sampling never needs gradients
 def fm_sample(net, cond, d_theta, steps=64):
-    """Equation 2: Euler-integrate dtheta/dt = v from t=0 (noise) to t=1."""
+    """Equation 2: Euler-integrate dtheta/dt = v from t=0 (noise) to t=1.
+
+    Arguments:
+      net: the trained velocity field.
+      cond: one conditioning row per sample wanted (n, d_cond).
+      d_theta: dimension of theta.
+      steps: how many Euler steps; more means a more faithful ODE solve.
+
+    Returns:
+      Samples (n, d_theta), drawn from q_phi(. | cond).
+    """
     n = len(cond)                                   # one sample per conditioning row
     th = torch.randn(n, d_theta, device=cond.device)          # theta(0) ~ N(0, I)
     for i in range(steps):
@@ -697,7 +807,20 @@ def fm_sample(net, cond, d_theta, steps=64):
 # %%
 
 def train_fm(net, th1, cond, steps=3000, batch=512, lr=1e-3, log=True):
-    """Minimize fm_loss by Adam -- the same loop as Part 1's fit()."""
+    """Minimize fm_loss by Adam -- the same loop as Part 1's fit().
+
+    Arguments:
+      net: the velocity field, trained in place.
+      th1: the data to learn (n, d_theta).
+      cond: the matching conditioning rows (n, d_cond).
+      steps: how many Adam steps to take.
+      batch: minibatch size, drawn fresh each step.
+      lr: Adam learning rate.
+      log: print the loss every 1000 steps.
+
+    Returns:
+      The same net, now trained.
+    """
     opt = torch.optim.Adam(net.parameters(), lr=lr)      # holds pointers to phi
     t0 = time.time()
     for step in range(steps):
@@ -797,10 +920,19 @@ def study_conditional(my_target, n_data=40000, steps=4000,
                       requests=(0.0, 0.33, 0.67, 1.0), sample_steps=64):
     """Fit a conditional flow to my_target and plot it against the target.
 
-    my_target(c) takes one float c in [0, 1] and returns one 2-D sample (any
-    array-like of length two -- a numpy array, a list, a tuple). We call it once
-    per example in a plain Python loop, which costs a second or two for 40000
-    samples and is nothing next to the training that follows.
+    Arguments:
+      my_target: takes one float c in [0, 1] and returns one 2-D sample (any
+        array-like of length two -- a numpy array, a list, a tuple). We call it
+        once per example in a plain Python loop, which costs a second or two
+        for 40000 samples and is nothing next to the training that follows.
+      n_data: how many training samples to draw.
+      steps: how many Adam steps to take.
+      requests: the values of c to plot; anything outside [0, 1] is
+        extrapolation, and is flagged as such in the panel title.
+      sample_steps: Euler steps used when sampling the fitted flow.
+
+    Returns:
+      The trained VelocityNet.
     """
     def draw(c):
         """Call my_target for every row of c (n, 1) -> samples (n, 2)."""
@@ -919,15 +1051,21 @@ A_LO, A_HI = 0.15, np.pi / 2 - 0.15            # ... and alpha [rad]
 
 
 def ball_prior():
-    """One draw of theta = (v, alpha), uniform in the box."""
+    """Draw one theta = (v, alpha), uniform in the prior box."""
     return [np.random.uniform(V_LO, V_HI), np.random.uniform(A_LO, A_HI)]
 
 
 def ball_sim(theta, n_throws=1):
-    """One draw of x = (range,), given theta = (v, alpha).
+    """Simulate one throw, measuring only where the ball lands.
 
-    Averaging n_throws repeats of the same throw shrinks the measurement error
-    to sigma / sqrt(n_throws); the physics itself is the single line for r.
+    Arguments:
+      theta: the parameters (v, alpha), speed in m/s and angle in rad.
+      n_throws: average this many repeats of the same throw, which shrinks the
+        measurement error to sigma / sqrt(n_throws). The physics itself is the
+        single line for r.
+
+    Returns:
+      [range], a one-element list, since x is one-dimensional here.
     """
     v, alpha = theta
     r = v ** 2 / G * np.sin(2 * alpha)                       # where it lands
@@ -935,7 +1073,15 @@ def ball_sim(theta, n_throws=1):
 
 
 def ball_path(theta, n=200):
-    """The flight path, for the picture only: theta -> (n, 2) of (x, y)."""
+    """Compute a flight path, for the picture only.
+
+    Arguments:
+      theta: the parameters (v, alpha).
+      n: how many points to sample along the trajectory.
+
+    Returns:
+      (n, 2) array of (x, y) positions, from launch to landing.
+    """
     v, alpha = theta
     t = np.linspace(0, 1, n) * 2 * v * np.sin(alpha) / G
     return np.stack([v * np.cos(alpha) * t,
@@ -943,14 +1089,29 @@ def ball_path(theta, n=200):
 
 
 def ridge(x_obs, v):
-    """The degeneracy: the angles that land a ball of speed v at range x_obs."""
+    """The degeneracy: the angles that land a ball of speed v at range x_obs.
+
+    Arguments:
+      x_obs: the observed range, a scalar.
+      v: the speeds to solve at, an array.
+
+    Returns:
+      (a, pi/2 - a): the line drive and the lob, nan at speeds too slow to
+      reach x_obs at all.
+    """
     s = G * x_obs / v ** 2                     # = sin(2 alpha); > 1 is unreachable
     a = 0.5 * np.arcsin(np.where(s > 1, np.nan, s))
     return a, np.pi / 2 - a                    # the line drive and the lob
 
 
 def plot_ridge(ax, x_obs, label=None):
-    """Draw that curve on a (v, alpha) plane, and set up the axes."""
+    """Draw the degeneracy curve on a (v, alpha) plane, and set up the axes.
+
+    Arguments:
+      ax: the axes to draw on.
+      x_obs: the observed range, a scalar.
+      label: legend label for the curve, or None to leave it unlabelled.
+    """
     v = np.linspace(V_LO, V_HI, 200)
     for i, a in enumerate(ridge(x_obs, v)):
         ax.plot(v, np.degrees(a), 'k--', lw=1, label=label if i == 0 else None)
@@ -995,14 +1156,26 @@ fig.tight_layout()
 # %%
 
 def train_sbi(prior, simulator, n_sim=40000, steps=3000, hidden=128, layers=3):
-    """Fit q(theta | x) from a prior and a simulator; return the trained net.
+    """Fit q(theta | x) from a prior and a simulator.
 
-        prior()          -> one theta vector (any array-like of length d_theta)
-        simulator(theta) -> one x vector     (any array-like of length d_x)
+    The dimensions of theta and x are worked out from one trial draw, so
+    nothing here has to be told them.
 
-    Both are plain Python/numpy: no tensors, no batching, no device. We call
-    them once per example in a loop, which costs a second or two for the
-    default 40000 pairs and is nothing next to the training that follows.
+    Arguments:
+      prior: called with no arguments, returns one theta vector (any
+        array-like of length d_theta).
+      simulator: called with one theta, returns one x vector (length d_x).
+        Both are plain Python/numpy -- no tensors, no batching, no device. We
+        call them once per example in a loop, which costs a second or two for
+        the default 40000 pairs and is nothing next to the training that
+        follows.
+      n_sim: how many (theta, x) pairs to simulate.
+      steps: how many Adam steps to take.
+      hidden, layers: size of the velocity network.
+
+    Returns:
+      The trained VelocityNet, carrying the z-scoring constants as buffers so
+      that sample_posterior can undo them.
     """
     theta_np = np.stack([np.asarray(prior(), dtype=float) for _ in range(n_sim)])
     x_np = np.stack([np.asarray(simulator(th), dtype=float) for th in theta_np])
@@ -1024,7 +1197,16 @@ def train_sbi(prior, simulator, n_sim=40000, steps=3000, hidden=128, layers=3):
 
 
 def sample_posterior(net, x_obs, n_samples=6000):
-    """Draw from q(theta | x_obs) -> (n_samples, d_theta) numpy array."""
+    """Draw posterior samples for one observation.
+
+    Arguments:
+      net: a network returned by train_sbi.
+      x_obs: the observation, one x vector of length d_x.
+      n_samples: how many posterior samples to draw.
+
+    Returns:
+      (n_samples, d_theta) numpy array of draws from q(theta | x_obs).
+    """
     xo = torch.tensor(np.asarray(x_obs, dtype=float), dtype=torch.float32, device=dev)
     cond = ((xo - net.x_mu) / net.x_sd).expand(n_samples, len(net.x_mu))
     theta = fm_sample(net, cond, len(net.t_mu)) * net.t_sd + net.t_mu  # un-z-score
@@ -1033,7 +1215,16 @@ def sample_posterior(net, x_obs, n_samples=6000):
 
 def plot_ball_posterior(ax, post, x_obs, truth=None, title=None,
                         ridge_label=None, post_label=None):
-    """Posterior scatter on the (v, alpha) plane, over the degeneracy curve."""
+    """Draw a posterior scatter on the (v, alpha) plane, over the degeneracy curve.
+
+    Arguments:
+      ax: the axes to draw on.
+      post: posterior samples (n, 2), as returned by sample_posterior.
+      x_obs: the observation those samples belong to.
+      truth: the true (v, alpha) to mark with a star, or None to leave it out.
+      title: optional axes title.
+      ridge_label, post_label: legend labels, or None to leave them out.
+    """
     plot_ridge(ax, np.asarray(x_obs, dtype=float)[0], label=ridge_label)
     ax.plot(post[:, 0], np.degrees(post[:, 1]), 'C0.', ms=1.5, alpha=.25,
             label=post_label)
@@ -1106,7 +1297,15 @@ fig.tight_layout()
 
 # 2: adding the time of flight kills the second mode. Only the simulator changes.
 def ball_sim2(theta):
-    """Range AND time of flight -> x has two components now."""
+    """Simulate one throw, measuring the range AND the time of flight.
+
+    Arguments:
+      theta: the parameters (v, alpha).
+
+    Returns:
+      [range, time of flight] -- x has two components now, which is all
+      train_sbi needs to notice the change.
+    """
     v, alpha = theta
     return [v ** 2 / G * np.sin(2 * alpha) + SIGMA_X * np.random.randn(),
             2 * v * np.sin(alpha) / G + 0.02 * np.random.randn()]
@@ -1173,7 +1372,18 @@ THETA_CHIRP = torch.tensor([55.3, 17.8], device=dev)
 
 
 def chirp_sim(theta, noise=1.0, phi=None):
-    """theta: (n,2) -> data (n, 1024). phi randomized unless given."""
+    """Simulate noisy chirps.
+
+    Arguments:
+      theta: the parameters (f0, fdot) per row, (n, 2).
+      noise: standard deviation of the white noise added; 0 gives clean signals.
+      phi: the nuisance phase (n, 1), randomized uniformly when left as None.
+        Randomizing it in training is how the network learns to marginalize
+        over a parameter we never infer.
+
+    Returns:
+      The data (n, 1024).
+    """
     if phi is None:
         phi = torch.rand(len(theta), 1, device=theta.device) * 2 * np.pi
     phase = 2 * np.pi * (theta[:, :1] * tgrid + 0.5 * theta[:, 1:2] * tgrid ** 2)
@@ -1208,9 +1418,15 @@ fig.tight_layout()
 def fit_pca(theta_bank, K=64):
     """Find the directions in which CLEAN signals from theta_bank actually vary.
 
-    Returns (mu, V, eigs): the mean waveform (N_T,), the top-K principal
-    directions V (K, N_T) to project onto, and the singular values rescaled
-    into a per-component signal-to-noise (all of them, for the spectrum plot).
+    Arguments:
+      theta_bank: the parameters to simulate signals for, (n, 2).
+      K: how many principal directions to keep.
+
+    Returns:
+      (mu, V, eigs): the mean waveform (N_T,), the top-K principal directions
+      V (K, N_T) to project onto, and the singular values rescaled into a
+      per-component signal-to-noise -- all of them, not just K, since the
+      spectrum plot wants the tail.
     """
     clean = chirp_sim(theta_bank, noise=0.0)
     mu = clean.mean(0)
@@ -1249,7 +1465,16 @@ fig.tight_layout()
 # %%
 
 def summarize(x, mu, V):
-    """Compress data onto the PCA basis: x (n, N_T) -> summaries (n, K)."""
+    """Compress data onto the PCA basis.
+
+    Arguments:
+      x: the data to compress, (n, N_T).
+      mu, V: the mean waveform and basis returned by fit_pca.
+
+    Returns:
+      The summaries (n, K) that the flow conditions on, instead of all N_T
+      numbers.
+    """
     return (x - mu) @ V.T
 
 
@@ -1269,8 +1494,18 @@ post0 = fm_sample(cnet, s_obs.expand(4000, K_PCA), 2) * th_sd + th_mu
 # %%
 
 def chirp_true_logpost(f0g, fdg, x_obs):
-    """Exact posterior on a grid, phase marginalized analytically:
-    the signal is linear in (cos phi, sin phi) -> 2-basis matched filter."""
+    """Evaluate the exact posterior on a grid, for comparison with the flow.
+
+    The nuisance phase is marginalized out: the signal is linear in
+    (cos phi, sin phi), so a two-basis matched filter does it.
+
+    Arguments:
+      f0g, fdg: the grid axes in f0 and fdot.
+      x_obs: the observed data (1, 1024).
+
+    Returns:
+      The unnormalized log-posterior on the grid, (len(f0g), len(fdg)).
+    """
     F0, FD = torch.meshgrid(f0g, fdg, indexing='ij')
     th = torch.stack([F0.ravel(), FD.ravel()], 1)
     phase = 2 * np.pi * (th[:, :1] * tgrid + 0.5 * th[:, 1:2] * tgrid ** 2)
@@ -1346,7 +1581,20 @@ print(f'training samples in the posterior neighbourhood: {inside.sum().item()} /
 # %%
 
 def fm_logprob(net, w1, cond, steps=64):
-    """log q(w1|cond) via reverse ODE + divergence (exact, per-dimension autograd)."""
+    """Equation 3: evaluate log q(w1 | cond) by integrating the ODE backwards.
+
+    Exact rather than estimated: the divergence is accumulated with one
+    autograd call per dimension of theta.
+
+    Arguments:
+      net: the trained velocity field.
+      w1: the points to evaluate the density at (n, d_theta).
+      cond: the matching conditioning rows (n, d_cond).
+      steps: how many Euler steps in the reverse solve.
+
+    Returns:
+      log q(w1 | cond), shape (n,).
+    """
     w = w1.clone()
     n_dim = w1.shape[1]
     logdet = torch.zeros(len(w1), device=w1.device)
@@ -1377,13 +1625,19 @@ def sequential_chirp(n_rounds=10, gamma=0.3, n_keep=1024, refit_pca=True,
     ratio q_c/q_m stands in for the likelihood), keep n_keep of them without
     replacement, simulate those, and refresh the buffer.
 
-    Arguments worth turning in Exercise 4:
-      gamma      tempering exponent. Larger zooms faster but leaves less
-                 safety margin if an early round's estimate excludes the truth.
-      refit_pca  refit the compression basis every round, or freeze round 1's.
+    Arguments:
+      n_rounds: how many zoom rounds to run.
+      gamma: the tempering exponent. Larger zooms faster but leaves less
+        safety margin if an early round's estimate excludes the truth.
+      n_keep: how many proposals survive each round and get simulated.
+      refit_pca: refit the compression basis every round, or freeze round 1's.
+      loss_fn: the training objective, exposed so it can be swapped out.
+      verbose: print the buffer and posterior widths each round.
+      x_obs: the observation to zoom in on, (1, 1024).
 
-    Returns (posts, spectra): the posterior samples read out at the end of each
-    round, and each round's PCA singular-value spectrum.
+    Returns:
+      (posts, spectra): the posterior samples read out at the end of each
+      round, and each round's PCA singular-value spectrum.
     """
     torch.manual_seed(1)
     buf_theta = draw_prior(4096)
@@ -1558,7 +1812,19 @@ fig.tight_layout()
 # should be consistent with pure noise, chi^2 per sample = 1.
 
 def max_logl(theta, x_obs=x_obs_chirp, n_phi=64):
-    """log L of each theta with the nuisance phase maximized out -> (n,)."""
+    """Score parameters by log L with the nuisance phase maximized out.
+
+    This is a matched filter, and it is the monitor Exercise 4.3 asks for: it
+    needs no knowledge of the true answer.
+
+    Arguments:
+      theta: the parameters to score, (n, 2).
+      x_obs: the observed data (1, 1024).
+      n_phi: how many phases to try when maximizing.
+
+    Returns:
+      The maximized log-likelihood of each theta, (n,).
+    """
     ph = 2 * np.pi * (theta[:, :1] * tgrid + 0.5 * theta[:, 1:2] * tgrid ** 2)
     phis = torch.linspace(0, 2 * np.pi, n_phi, device=dev)[:, None, None]
     h = AMP * torch.sin(ph + phis)                    # (n_phi, n, N_T) templates
