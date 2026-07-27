@@ -39,6 +39,7 @@ PyPI (~20 s on Colab) and simulates live.
 | file | role |
 |---|---|
 | `tutorial_lisa_sbi.ipynb` | the tutorial (open this) |
+| `tutorial_solutions.ipynb` | the same tutorial with a worked reference solution and discussion after every exercise |
 | `lisa_mbhb_first_steps.ipynb` | **companion:** the sequential zoom on the MBHB, live sims — bare bones (latent-space flows, prior in the proposal mixture, importance-weighted readout, no Procrustes/PSIS/EMA) |
 | `*_src.py` | notebook sources (jupytext percent format) |
 | `build_notebook.py` | `*_src.py` → `.ipynb` converter |
