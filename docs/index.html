@@ -2526,15 +2526,15 @@
     <!-- MBHB — sequential SBI from the full prior (new, live result) -->
     <section>
       <p class="eyebrow">Applications &gt; Underexplored capabilities of SBI</p>
-      <h2>Sequential: LDC1-1 MBHB from the <em>full</em> prior</h2>
+      <h2>Sequential: LDC1-1 MBHB from the <em>full</em> prior (PRELIMINARY!)</h2>
 
       <div style="display:flex; gap:16px; margin-top:4px; align-items:flex-start;">
         <div style="flex:1; text-align:center;">
-          <img src="img/p_widecat_buffer.gif" style="max-width:100%; max-height:430px;">
+          <img src="img/p_widecat_buffer.gif" style="max-width:100%; max-height:400px;">
           <p style="font-size:0.6em; color:#7f8c8d; margin:2px 0 0;">training buffer, round by round</p>
         </div>
         <div style="flex:1; text-align:center;">
-          <img src="img/p_widecat_corner.png" style="max-width:100%; max-height:430px;">
+          <img src="img/p_widecat_corner.png" style="max-width:100%; max-height:400px;">
           <p style="font-size:0.6em; color:#7f8c8d; margin:2px 0 0;">final posterior (red = injected truth)</p>
         </div>
       </div>
@@ -2545,9 +2545,6 @@
             onto the source; the inset shows predictive waveforms converging on the data.</li>
         <li><strong>Right:</strong> the result &mdash; 83 rounds, 1.30M waveforms, 1h57m on one GPU,
             eight of nine parameters within \(1\sigma\). No narrowed prior, no template bank.</li>
-        <li><strong>The readout is the check, not the loss.</strong> Importance weights against the
-            tempered proposal give \(\hat{k}=0.50\) and 41767 effective samples. A run whose training
-            losses looked <em>better</em> throughout gave \(\hat{k}=\infty\) &mdash; only this diagnostic caught it.</li>
       </ul>
     </section>
 
@@ -2614,21 +2611,14 @@
               <td style="padding:7px 8px;">a <strong>toy gravitational wave</strong></td>
               <td style="padding:7px 8px; color:#566069;">data compression (PCA) + <strong>sequential</strong> zoom</td>
             </tr>
-            <tr style="background:#fdf2e6; border-left:4px solid #e67e22;">
-              <td style="padding:7px 8px; font-weight:600; color:#e67e22;">&rarr;</td>
+            <tr style="background:#ffffff; border-left:4px solid #e67e22;">
+              <td style="padding:7px 8px; font-weight:600; color:#e67e22;"></td>
               <td style="padding:7px 8px;">a <strong>massive black-hole binary in LISA data</strong><br>
                   <span style="color:#7f8c8d;">LDC1 &ldquo;Radler&rdquo;, 9 parameters, waveforms simulated live</span></td>
               <td style="padding:7px 8px; color:#566069;">the companion notebook</td>
             </tr>
           </table>
 
-          <div class="box box-blue" style="margin-top:12px; font-size:0.74em;">
-            <strong>The spine:</strong> the ten-line <code>fm_loss</code> and the small
-            <code>VelocityNet</code> you write in Part&nbsp;2 are reused <em>literally unchanged</em> in
-            Parts&nbsp;3 and 4, and again in the companion notebook. This is not magic
-            infrastructure &mdash; it is a loss function and a loop you fully understand, and it
-            analyzes a gravitational wave.
-          </div>
         </div>
 
         <div style="flex:0.65; font-size:0.74em; line-height:1.45;">
@@ -2661,10 +2651,6 @@
                  style="flex:0 0 94px; width:94px; background:#fff; padding:5px; border-radius:6px;">
           </div>
 
-          <p style="margin:9px 2px 0; font-size:0.88em; color:#7f8c8d;">
-            A companion notebook (<code>lisa_mbhb_first_steps</code>) installs the
-            lisabeta waveform stack and simulates LISA data live, if you want to go further.
-          </p>
         </div>
       </div>
     </section>
@@ -2724,15 +2710,9 @@
       </div>
 
       <div style="display:flex; gap:16px; margin-top:14px; font-size:0.74em;">
-        <div class="box box-purple" style="flex:1; margin:0;">
-          <strong>The take-home.</strong> The whole dynamic loop at teaching size is ~40 lines.
-          At production scale the same method &mdash; automated by <code>falcon</code> &mdash; reaches
-          posteriors within <strong>~1 nat</strong> of the information-theoretic optimum on the
-          LDC1-1 MBHB problem.
-        </div>
         <div style="flex:0.9; font-size:0.9em; color:#7f8c8d; line-height:1.45;">
-          Deliberately <em>not</em> used in the notebook: any SBI framework. At tutorial scale a
-          framework only subtracts &mdash; black-box calls, install risk, abstraction overhead.
+          Deliberately <em>not</em> used in the notebook: any SBI framework. 
+          In this tutorial we avoid black-box calls (pytorch is already enough of a black box).
           <br><br>
           <span style="color:#34495e;">Dynamic SBI: arXiv:2510.13997 &middot; falcon: github.com/cweniger/falcon</span>
         </div>
